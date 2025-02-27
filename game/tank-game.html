@@ -1,0 +1,886 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Танчики - P2P игра</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 0;
+            background-color: #333;
+            color: #fff;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            height: 100vh;
+            overflow: hidden;
+        }
+        
+        .container {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            width: 100%;
+            max-width: 800px;
+        }
+        
+        canvas {
+            border: 2px solid #555;
+            background-color: #222;
+            margin-top: 20px;
+        }
+        
+        #menu {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            margin-top: 50px;
+            width: 100%;
+        }
+        
+        #game {
+            display: none;
+            flex-direction: column;
+            align-items: center;
+            width: 100%;
+        }
+        
+        #serversList {
+            width: 90%;
+            max-width: 400px;
+            background-color: #444;
+            border-radius: 5px;
+            padding: 10px;
+            margin-top: 20px;
+            max-height: 200px;
+            overflow-y: auto;
+        }
+        
+        .server-item {
+            background-color: #555;
+            padding: 10px;
+            margin: 5px 0;
+            border-radius: 3px;
+            cursor: pointer;
+            transition: background-color 0.2s;
+        }
+        
+        .server-item:hover {
+            background-color: #666;
+        }
+        
+        input, button {
+            margin: 10px;
+            padding: 10px;
+            width: 90%;
+            max-width: 300px;
+            border: none;
+            border-radius: 3px;
+        }
+        
+        button {
+            background-color: #4CAF50;
+            color: white;
+            cursor: pointer;
+            transition: background-color 0.2s;
+        }
+        
+        button:hover {
+            background-color: #45a049;
+        }
+        
+        #controls {
+            margin-top: 10px;
+            text-align: center;
+            font-size: 0.9em;
+            color: #ccc;
+        }
+        
+        #gameStatus {
+            margin-top: 10px;
+            font-weight: bold;
+            color: #4CAF50;
+        }
+        
+        #connectionLink {
+            word-break: break-all;
+            margin: 10px;
+            padding: 10px;
+            background-color: #444;
+            border-radius: 3px;
+            display: none;
+            max-width: 400px;
+        }
+        
+        #waitingText {
+            display: none;
+            margin-top: 20px;
+            text-align: center;
+        }
+        
+        #backToMenu {
+            background-color: #f44336;
+            display: none;
+        }
+        
+        #scoreInfo {
+            margin-top: 10px;
+            font-size: 1.2em;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Танчики</h1>
+        
+        <!-- Меню -->
+        <div id="menu">
+            <input type="text" id="playerName" placeholder="Ваше имя">
+            <button id="createGame">Создать игру</button>
+            <button id="joinGameBtn">Присоединиться по ссылке</button>
+            <input type="text" id="joinLink" placeholder="Вставьте ссылку" style="display: none;">
+            <button id="confirmJoin" style="display: none;">Подтвердить</button>
+            
+            <h3>Доступные игры:</h3>
+            <div id="serversList"></div>
+            <button id="refreshServers">Обновить список</button>
+        </div>
+        
+        <!-- Ожидание игрока -->
+        <div id="waitingText">
+            <h2>Ожидание подключения игрока...</h2>
+            <p>Поделитесь этой ссылкой с другом:</p>
+            <div id="connectionLink"></div>
+            <button id="copyLink">Скопировать ссылку</button>
+            <button id="cancelWaiting">Отменить</button>
+        </div>
+        
+        <!-- Игровой экран -->
+        <div id="game">
+            <div id="scoreInfo">
+                <span id="myScore">0</span> : <span id="enemyScore">0</span>
+            </div>
+            <canvas id="gameCanvas" width="800" height="600"></canvas>
+            <div id="gameStatus"></div>
+            <div id="controls">
+                <p>Управление: WASD - движение, мышь - поворот башни, ЛКМ - стрелять</p>
+            </div>
+            <button id="backToMenu">Вернуться в меню</button>
+        </div>
+    </div>
+
+    <!-- Подключаем PeerJS для WebRTC соединений -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/peerjs/1.4.7/peerjs.min.js"></script>
+    
+    <script>
+        // Основные элементы страницы
+        const menu = document.getElementById('menu');
+        const game = document.getElementById('game');
+        const waitingText = document.getElementById('waitingText');
+        const connectionLink = document.getElementById('connectionLink');
+        const gameCanvas = document.getElementById('gameCanvas');
+        const gameStatus = document.getElementById('gameStatus');
+        const serversList = document.getElementById('serversList');
+        const playerNameInput = document.getElementById('playerName');
+        const joinLink = document.getElementById('joinLink');
+        const myScoreElem = document.getElementById('myScore');
+        const enemyScoreElem = document.getElementById('enemyScore');
+        
+        // Управление экранами
+        document.getElementById('createGame').addEventListener('click', createGame);
+        document.getElementById('joinGameBtn').addEventListener('click', () => {
+            joinLink.style.display = 'block';
+            document.getElementById('confirmJoin').style.display = 'block';
+        });
+        document.getElementById('confirmJoin').addEventListener('click', () => joinGame(joinLink.value));
+        document.getElementById('copyLink').addEventListener('click', copyLinkToClipboard);
+        document.getElementById('cancelWaiting').addEventListener('click', cancelWaiting);
+        document.getElementById('backToMenu').addEventListener('click', backToMenu);
+        document.getElementById('refreshServers').addEventListener('click', refreshServers);
+        
+        // Настройки игры
+        const CANVAS_WIDTH = 800;
+        const CANVAS_HEIGHT = 600;
+        const TANK_SIZE = 30;
+        const BULLET_SIZE = 5;
+        const BULLET_SPEED = 7;
+        const TANK_SPEED = 3;
+        const ROTATION_SPEED = 0.05;
+        const COOLDOWN_TIME = 500; // ms
+        
+        // Игровые переменные
+        let ctx;
+        let gameLoop;
+        let peer;
+        let connection;
+        let isHost = false;
+        let playerName = '';
+        let myTank;
+        let enemyTank;
+        let obstacles = [];
+        let bullets = [];
+        let keys = {};
+        let mouseX = 0;
+        let mouseY = 0;
+        let lastShootTime = 0;
+        let myScore = 0;
+        let enemyScore = 0;
+        let gameStarted = false;
+        let respawnTimer = 0;
+        
+        // Инициализация игры
+        function initGame() {
+            ctx = gameCanvas.getContext('2d');
+            
+            // Используем сохраненное имя или генерируем случайное
+            if (playerNameInput.value) {
+                playerName = playerNameInput.value;
+                localStorage.setItem('tankGamePlayerName', playerName);
+            } else {
+                playerName = localStorage.getItem('tankGamePlayerName') || 'Игрок' + Math.floor(Math.random() * 1000);
+                playerNameInput.value = playerName;
+            }
+            
+            // Обработчики событий
+            window.addEventListener('keydown', e => keys[e.key.toLowerCase()] = true);
+            window.addEventListener('keyup', e => keys[e.key.toLowerCase()] = false);
+            gameCanvas.addEventListener('mousemove', updateMousePosition);
+            gameCanvas.addEventListener('click', shoot);
+            
+            // Создаем карту
+            createMap();
+            
+            // Создаем танки
+            myTank = createTank(isHost ? 'green' : 'blue', isHost);
+            enemyTank = createTank(isHost ? 'blue' : 'green', !isHost);
+            
+            // Сбрасываем счет
+            myScore = 0;
+            enemyScore = 0;
+            updateScore();
+            
+            // Запускаем игровой цикл
+            gameLoop = setInterval(gameUpdate, 1000 / 60);
+            gameStarted = true;
+        }
+        
+        // Создание игры (как хост)
+        function createGame() {
+            isHost = true;
+            playerName = playerNameInput.value || 'Хост' + Math.floor(Math.random() * 1000);
+            
+            menu.style.display = 'none';
+            waitingText.style.display = 'block';
+            
+            // Создаем уникальный ID для игры
+            const peerId = 'tankgame-' + generateId();
+            
+            // Инициализируем peer-соединение
+            peer = new Peer(peerId);
+            
+            peer.on('open', id => {
+                console.log('Мой PeerJS ID: ' + id);
+                
+                // Создаем ссылку на игру
+                const gameLink = window.location.href.split('?')[0] + '?join=' + id;
+                connectionLink.textContent = gameLink;
+                connectionLink.style.display = 'block';
+                
+                // Добавляем игру в список доступных
+                addGameToList(id, playerName);
+            });
+            
+            peer.on('connection', conn => {
+                connection = conn;
+                setupConnection();
+                
+                waitingText.style.display = 'none';
+                game.style.display = 'flex';
+                document.getElementById('backToMenu').style.display = 'block';
+                
+                gameStatus.textContent = 'Игрок подключился!';
+                initGame();
+            });
+        }
+        
+        // Присоединение к игре
+        function joinGame(link) {
+            const peerId = link.includes('?join=') 
+                ? link.split('?join=')[1] 
+                : link;
+                
+            if (!peerId) {
+                alert('Неверная ссылка!');
+                return;
+            }
+            
+            isHost = false;
+            playerName = playerNameInput.value || 'Игрок' + Math.floor(Math.random() * 1000);
+            
+            menu.style.display = 'none';
+            gameStatus.textContent = 'Подключение...';
+            game.style.display = 'flex';
+            
+            peer = new Peer();
+            
+            peer.on('open', id => {
+                console.log('Мой PeerJS ID: ' + id);
+                connection = peer.connect(peerId);
+                
+                setupConnection();
+            });
+        }
+        
+        // Настройка P2P соединения
+        function setupConnection() {
+            connection.on('open', () => {
+                console.log('Соединение установлено!');
+                
+                // Отправляем свое имя
+                sendData({ type: 'name', name: playerName });
+                
+                // Инициализируем игру, если мы не хост
+                if (!isHost && !gameStarted) {
+                    initGame();
+                }
+            });
+            
+            connection.on('data', data => {
+                handleReceivedData(data);
+            });
+            
+            connection.on('close', () => {
+                gameStatus.textContent = 'Соединение разорвано. Игра завершена.';
+                clearInterval(gameLoop);
+                document.getElementById('backToMenu').style.display = 'block';
+            });
+            
+            connection.on('error', err => {
+                console.error('Ошибка соединения:', err);
+                gameStatus.textContent = 'Ошибка соединения!';
+                document.getElementById('backToMenu').style.display = 'block';
+            });
+        }
+        
+        // Обработка полученных данных
+        function handleReceivedData(data) {
+            switch(data.type) {
+                case 'position':
+                    enemyTank.x = data.x;
+                    enemyTank.y = data.y;
+                    enemyTank.angle = data.angle;
+                    enemyTank.turretAngle = data.turretAngle;
+                    break;
+                    
+                case 'shoot':
+                    createBullet(
+                        data.x,
+                        data.y,
+                        data.angle,
+                        false
+                    );
+                    break;
+                    
+                case 'hit':
+                    if (data.target === 'enemy') {
+                        myTank.health -= 1;
+                        if (myTank.health <= 0) {
+                            // Танк уничтожен
+                            myTank.destroyed = true;
+                            enemyScore++;
+                            updateScore();
+                            respawnTimer = 30; // ~3 секунды при 60fps
+                            sendData({ type: 'score', myScore: enemyScore, enemyScore: myScore });
+                        }
+                    }
+                    break;
+                    
+                case 'score':
+                    myScore = data.enemyScore;
+                    enemyScore = data.myScore;
+                    updateScore();
+                    break;
+                    
+                case 'name':
+                    gameStatus.textContent = 'Игра с: ' + data.name;
+                    break;
+            }
+        }
+        
+        // Отправка данных
+        function sendData(data) {
+            if (connection && connection.open) {
+                connection.send(data);
+            }
+        }
+        
+        // Обновление игры (игровой цикл)
+        function gameUpdate() {
+            // Обновляем позицию танка
+            if (!myTank.destroyed) {
+                updateTankPosition();
+            } else if (respawnTimer > 0) {
+                respawnTimer--;
+                if (respawnTimer === 0) {
+                    respawnTank();
+                }
+            }
+            
+            // Обновляем пули
+            updateBullets();
+            
+            // Отрисовка
+            draw();
+            
+            // Отправляем свою позицию
+            if (connection && connection.open) {
+                sendData({
+                    type: 'position',
+                    x: myTank.x,
+                    y: myTank.y,
+                    angle: myTank.angle,
+                    turretAngle: myTank.turretAngle
+                });
+            }
+        }
+        
+        // Обновление позиции танка
+        function updateTankPosition() {
+            // Сохраняем предыдущую позицию
+            const prevX = myTank.x;
+            const prevY = myTank.y;
+            
+            // Движение вперед/назад
+            if (keys['w']) {
+                myTank.x += Math.cos(myTank.angle) * TANK_SPEED;
+                myTank.y += Math.sin(myTank.angle) * TANK_SPEED;
+            }
+            if (keys['s']) {
+                myTank.x -= Math.cos(myTank.angle) * TANK_SPEED;
+                myTank.y -= Math.sin(myTank.angle) * TANK_SPEED;
+            }
+            
+            // Поворот танка
+            if (keys['a']) {
+                myTank.angle -= ROTATION_SPEED;
+            }
+            if (keys['d']) {
+                myTank.angle += ROTATION_SPEED;
+            }
+            
+            // Обновляем угол башни по позиции мыши
+            const dx = mouseX - myTank.x;
+            const dy = mouseY - myTank.y;
+            myTank.turretAngle = Math.atan2(dy, dx);
+            
+            // Проверка столкновений со стенами
+            if (checkCollisions(myTank)) {
+                myTank.x = prevX;
+                myTank.y = prevY;
+            }
+            
+            // Проверка выхода за границы карты
+            if (myTank.x < TANK_SIZE) myTank.x = TANK_SIZE;
+            if (myTank.x > CANVAS_WIDTH - TANK_SIZE) myTank.x = CANVAS_WIDTH - TANK_SIZE;
+            if (myTank.y < TANK_SIZE) myTank.y = TANK_SIZE;
+            if (myTank.y > CANVAS_HEIGHT - TANK_SIZE) myTank.y = CANVAS_HEIGHT - TANK_SIZE;
+        }
+        
+        // Проверка столкновений
+        function checkCollisions(tank) {
+            for (const obstacle of obstacles) {
+                if (rectCollision(
+                    tank.x - TANK_SIZE/2, 
+                    tank.y - TANK_SIZE/2, 
+                    TANK_SIZE, 
+                    TANK_SIZE,
+                    obstacle.x,
+                    obstacle.y,
+                    obstacle.width,
+                    obstacle.height
+                )) {
+                    return true;
+                }
+            }
+            return false;
+        }
+        
+        // Проверка столкновения прямоугольников
+        function rectCollision(x1, y1, w1, h1, x2, y2, w2, h2) {
+            return x1 < x2 + w2 &&
+                   x1 + w1 > x2 &&
+                   y1 < y2 + h2 &&
+                   y1 + h1 > y2;
+        }
+        
+        // Обновление пуль
+        function updateBullets() {
+            for (let i = bullets.length - 1; i >= 0; i--) {
+                const bullet = bullets[i];
+                
+                // Движение пули
+                bullet.x += Math.cos(bullet.angle) * BULLET_SPEED;
+                bullet.y += Math.sin(bullet.angle) * BULLET_SPEED;
+                
+                // Проверка выхода за границы
+                if (bullet.x < 0 || bullet.x > CANVAS_WIDTH || 
+                    bullet.y < 0 || bullet.y > CANVAS_HEIGHT) {
+                    bullets.splice(i, 1);
+                    continue;
+                }
+                
+                // Проверка столкновений с препятствиями
+                for (const obstacle of obstacles) {
+                    if (rectCollision(
+                        bullet.x - BULLET_SIZE/2,
+                        bullet.y - BULLET_SIZE/2,
+                        BULLET_SIZE,
+                        BULLET_SIZE,
+                        obstacle.x,
+                        obstacle.y,
+                        obstacle.width,
+                        obstacle.height
+                    )) {
+                        bullets.splice(i, 1);
+                        break;
+                    }
+                }
+                
+                // Проверка столкновений с танком противника
+                if (bullet.isPlayer && !enemyTank.destroyed &&
+                    rectCollision(
+                        bullet.x - BULLET_SIZE/2,
+                        bullet.y - BULLET_SIZE/2,
+                        BULLET_SIZE,
+                        BULLET_SIZE,
+                        enemyTank.x - TANK_SIZE/2,
+                        enemyTank.y - TANK_SIZE/2,
+                        TANK_SIZE,
+                        TANK_SIZE
+                    )) {
+                    // Отправляем сообщение о попадании
+                    sendData({ type: 'hit', target: 'enemy' });
+                    myScore++;
+                    updateScore();
+                    bullets.splice(i, 1);
+                }
+                
+                // Проверка столкновений с собственным танком
+                if (!bullet.isPlayer && !myTank.destroyed &&
+                    rectCollision(
+                        bullet.x - BULLET_SIZE/2,
+                        bullet.y - BULLET_SIZE/2,
+                        BULLET_SIZE,
+                        BULLET_SIZE,
+                        myTank.x - TANK_SIZE/2,
+                        myTank.y - TANK_SIZE/2,
+                        TANK_SIZE,
+                        TANK_SIZE
+                    )) {
+                    myTank.health -= 1;
+                    if (myTank.health <= 0) {
+                        // Танк уничтожен
+                        myTank.destroyed = true;
+                        enemyScore++;
+                        updateScore();
+                        respawnTimer = 30; // ~3 секунды при 60fps
+                        sendData({ type: 'score', myScore: enemyScore, enemyScore: myScore });
+                    }
+                    bullets.splice(i, 1);
+                }
+            }
+        }
+        
+        // Создание пули
+        function createBullet(x, y, angle, isPlayer) {
+            bullets.push({
+                x,
+                y,
+                angle,
+                isPlayer
+            });
+        }
+        
+        // Выстрел
+        function shoot() {
+            const now = Date.now();
+            if (now - lastShootTime < COOLDOWN_TIME || myTank.destroyed) return;
+            
+            lastShootTime = now;
+            
+            const bulletX = myTank.x + Math.cos(myTank.turretAngle) * TANK_SIZE;
+            const bulletY = myTank.y + Math.sin(myTank.turretAngle) * TANK_SIZE;
+            
+            createBullet(bulletX, bulletY, myTank.turretAngle, true);
+            
+            // Отправляем данные о выстреле
+            sendData({
+                type: 'shoot',
+                x: bulletX,
+                y: bulletY,
+                angle: myTank.turretAngle
+            });
+        }
+        
+        // Обновление позиции мыши
+        function updateMousePosition(e) {
+            const rect = gameCanvas.getBoundingClientRect();
+            mouseX = e.clientX - rect.left;
+            mouseY = e.clientY - rect.top;
+        }
+        
+        // Обновление счета
+        function updateScore() {
+            myScoreElem.textContent = myScore;
+            enemyScoreElem.textContent = enemyScore;
+        }
+        
+        // Респаун танка
+        function respawnTank() {
+            myTank.destroyed = false;
+            myTank.health = 3;
+            
+            // Размещаем в безопасном месте
+            if (isHost) {
+                myTank.x = TANK_SIZE * 2;
+                myTank.y = TANK_SIZE * 2;
+            } else {
+                myTank.x = CANVAS_WIDTH - TANK_SIZE * 2;
+                myTank.y = CANVAS_HEIGHT - TANK_SIZE * 2;
+            }
+        }
+        
+        // Отрисовка
+        function draw() {
+            // Очищаем холст
+            ctx.fillStyle = '#222';
+            ctx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
+            
+            // Рисуем препятствия
+            ctx.fillStyle = '#555';
+            for (const obstacle of obstacles) {
+                ctx.fillRect(obstacle.x, obstacle.y, obstacle.width, obstacle.height);
+            }
+            
+            // Рисуем пули
+            ctx.fillStyle = '#FF0';
+            for (const bullet of bullets) {
+                ctx.beginPath();
+                ctx.arc(bullet.x, bullet.y, BULLET_SIZE/2, 0, Math.PI * 2);
+                ctx.fill();
+            }
+            
+            // Рисуем танки
+            drawTank(myTank);
+            drawTank(enemyTank);
+            
+            // Рисуем таймер респауна
+            if (myTank.destroyed && respawnTimer > 0) {
+                ctx.fillStyle = 'white';
+                ctx.font = '24px Arial';
+                ctx.textAlign = 'center';
+                ctx.fillText(`Респаун через: ${Math.ceil(respawnTimer / 10)}`, CANVAS_WIDTH / 2, CANVAS_HEIGHT / 2);
+            }
+        }
+        
+        // Рисуем танк
+        function drawTank(tank) {
+            if (tank.destroyed) return;
+            
+            ctx.save();
+            
+            // Перемещаем контекст в позицию танка
+            ctx.translate(tank.x, tank.y);
+            
+            // Рисуем корпус
+            ctx.rotate(tank.angle);
+            ctx.fillStyle = tank.color;
+            ctx.fillRect(-TANK_SIZE/2, -TANK_SIZE/2, TANK_SIZE, TANK_SIZE);
+            
+            // Рисуем отметку направления
+            ctx.fillStyle = '#000';
+            ctx.fillRect(0, -5, TANK_SIZE/2, 10);
+            
+            // Сбрасываем поворот корпуса
+            ctx.rotate(-tank.angle);
+            
+            // Рисуем башню
+            ctx.rotate(tank.turretAngle);
+            ctx.fillStyle = '#000';
+            ctx.fillRect(0, -3, TANK_SIZE, 6);
+            
+            ctx.restore();
+            
+            // Рисуем полоску здоровья
+            ctx.fillStyle = 'red';
+            const healthBarWidth = TANK_SIZE;
+            ctx.fillRect(tank.x - healthBarWidth/2, tank.y - TANK_SIZE - 10, healthBarWidth, 5);
+            
+            ctx.fillStyle = 'green';
+            const currentHealthWidth = (tank.health / 3) * healthBarWidth;
+            ctx.fillRect(tank.x - healthBarWidth/2, tank.y - TANK_SIZE - 10, currentHealthWidth, 5);
+        }
+        
+        // Создание танка
+        function createTank(color, isHost) {
+            return {
+                x: isHost ? TANK_SIZE * 2 : CANVAS_WIDTH - TANK_SIZE * 2,
+                y: isHost ? TANK_SIZE * 2 : CANVAS_HEIGHT - TANK_SIZE * 2,
+                angle: isHost ? Math.PI / 4 : -Math.PI * 3/4,
+                turretAngle: 0,
+                color: color,
+                health: 3,
+                destroyed: false
+            };
+        }
+        
+        // Создание карты с препятствиями
+        function createMap() {
+            obstacles = [
+                // Центральное препятствие
+                { x: 350, y: 250, width: 100, height: 100 },
+                
+                // Угловые блоки
+                { x: 50, y: 50, width: 70, height: 70 },
+                { x: 680, y: 50, width: 70, height: 70 },
+                { x: 50, y: 480, width: 70, height: 70 },
+                { x: 680, y: 480, width: 70, height: 70 },
+                
+                // Боковые препятствия
+                { x: 250, y: 150, width: 30, height: 100 },
+                { x: 520, y: 150, width: 30, height: 100 },
+                { x: 250, y: 350, width: 30, height: 100 },
+                { x: 520, y: 350, width: 30, height: 100 }
+            ];
+        }
+        
+        // Генерация уникального ID
+        function generateId() {
+            return Math.random().toString(36).substring(2, 10);
+        }
+        
+        // Добавление игры в список доступных
+        function addGameToList(id, name) {
+            // Сохраняем информацию о сервере в LocalStorage
+            const servers = JSON.parse(localStorage.getItem('tankGameServers') || '[]');
+            servers.push({
+                id: id,
+                name: name,
+                time: Date.now()
+            });
+            
+            // Сохраняем только последние 10 серверов
+            while (servers.length > 10) {
+                servers.shift();
+            }
+            
+            localStorage.setItem('tankGameServers', JSON.stringify(servers));
+            
+            refreshServers();
+        }
+        
+        // Обновление списка серверов
+        function refreshServers() {
+            serversList.innerHTML = '';
+            
+            const servers = JSON.parse(localStorage.getItem('tankGameServers') || '[]');
+            
+            // Фильтруем по времени (показываем только сервера за последние 24 часа)
+            const recentServers = servers.filter(server => {
+                return Date.now() - server.time < 24 * 60 * 60 * 1000;
+            });
+            
+            if (recentServers.length === 0) {
+                serversList.innerHTML = '<div class="server-item">Нет доступных игр</div>';
+                return;
+            }
+            
+            // Сортируем по времени (новые сверху)
+            recentServers.sort((a, b) => b.time - a.time);
+            
+            // Отображаем сервера
+            recentServers.forEach(server => {
+                const serverItem = document.createElement('div');
+                serverItem.className = 'server-item';
+                serverItem.textContent = `${server.name} (Создана ${formatTime(server.time)})`;
+                
+                serverItem.addEventListener('click', () => {
+                    joinGame(server.id);
+                });
+                
+                serversList.appendChild(serverItem);
+            });
+            
+            // Обновляем список в хранилище
+            localStorage.setItem('tankGameServers', JSON.stringify(recentServers));
+        }
+        
+        // Форматирование времени
+        function formatTime(timestamp) {
+            const date = new Date(timestamp);
+            return `${date.getHours()}:${String(date.getMinutes()).padStart(2, '0')}`;
+        }
+        
+        // Копирование ссылки в буфер обмена
+        function copyLinkToClipboard() {
+            const link = connectionLink.textContent;
+            
+            navigator.clipboard.writeText(link).then(() => {
+                alert('Ссылка скопирована в буфер обмена!');
+            }).catch(err => {
+                console.error('Ошибка при копировании: ', err);
+            });
+        }
+        
+        // Отмена ожидания (как хост)
+        function cancelWaiting() {
+            waitingText.style.display = 'none';
+            menu.style.display = 'flex';
+            
+            if (peer) {
+                peer.destroy();
+            }
+        }
+        
+        // Возврат в меню
+        function backToMenu() {
+            game.style.display = 'none';
+            menu.style.display = 'flex';
+            document.getElementById('backToMenu').style.display = 'none';
+            
+            if (gameLoop) {
+                clearInterval(gameLoop);
+                gameLoop = null;
+            }
+            
+            if (peer) {
+                peer.destroy();
+            }
+            
+            gameStarted = false;
+        }
+        
+        // Инициализация
+        window.onload = function() {
+            // Загружаем имя игрока из LocalStorage
+            const savedName = localStorage.getItem('tankGamePlayerName');
+            if (savedName) {
+                playerNameInput.value = savedName;
+            }
+            
+            // Обновляем список серверов
+            refreshServers();
+            
+            // Проверяем, есть ли параметр join в URL
+            const urlParams = new URLSearchParams(window.location.search);
+            const joinId = urlParams.get('join');
+            
+            if (joinId) {
+                joinGame(joinId);
+            }
+        };
+    </script>
+</body>
+</html>
