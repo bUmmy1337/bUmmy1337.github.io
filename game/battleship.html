@@ -368,6 +368,64 @@
             border-bottom: 5px solid #0077cc;
             margin-left: 10px;
         }
+        
+        .connection-troubleshoot {
+            margin-top: 15px;
+            padding: 10px;
+            background-color: #fff8e1;
+            border-left: 3px solid #ffc107;
+            border-radius: 5px;
+            font-size: 14px;
+            display: none;
+        }
+        
+        .retry-btn {
+            background-color: #ffc107;
+            color: #333;
+        }
+        
+        .retry-btn:hover {
+            background-color: #e0a800;
+        }
+        
+        .connection-tips {
+            margin-top: 10px;
+        }
+        
+        .connection-status {
+            display: inline-block;
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            margin-right: 5px;
+        }
+        
+        .status-connecting {
+            background-color: #ffc107;
+        }
+        
+        .status-connected {
+            background-color: #28a745;
+        }
+        
+        .status-error {
+            background-color: #dc3545;
+        }
+        
+        .connection-error-message {
+            color: #dc3545;
+            margin-top: 10px;
+            font-weight: bold;
+        }
+        
+        #networkInfo {
+            margin-top: 15px;
+            font-size: 13px;
+            background-color: rgba(255, 255, 255, 0.1);
+            padding: 8px;
+            border-radius: 4px;
+            text-align: left;
+        }
     </style>
 </head>
 <body>
@@ -391,6 +449,21 @@
                 <input type="text" id="joiningId" style="padding: 10px; width: 250px;">
                 <button id="connectToGame">Подключиться</button>
             </div>
+            
+            <!-- Раздел с информацией о решении проблем подключения -->
+            <div id="connectionTroubleshoot" class="connection-troubleshoot">
+                <h3>Проблемы с подключением?</h3>
+                <p>Если у вас возникают трудности с установлением соединения:</p>
+                <ul class="connection-tips">
+                    <li>Убедитесь, что оба устройства подключены к интернету</li>
+                    <li>Попробуйте использовать Wi-Fi вместо мобильных данных</li>
+                    <li>Используйте один и тот же браузер (предпочтительно Chrome или Firefox)</li>
+                    <li>Отключите VPN, если он активирован</li>
+                    <li>Попробуйте несколько раз создать новую игру</li>
+                </ul>
+                <button id="retryConnection" class="retry-btn">Попробовать снова</button>
+                <div id="connectionErrorMessage" class="connection-error-message"></div>
+            </div>
         </div>
 
         <div id="waitingOverlay" class="waiting-overlay hidden">
@@ -401,6 +474,17 @@
                 <div id="waitingGameId" class="waiting-game-id"></div>
                 <button id="waitingCopyBtn" class="waiting-copy-btn">Копировать код</button>
             </div>
+            <div id="connectionStatusInfo">
+                <span id="connectionStatusIcon" class="connection-status status-connecting"></span>
+                <span id="connectionStatusText">Установка соединения...</span>
+            </div>
+            
+            <div id="networkInfo" class="hidden">
+                <div>Информация о сети:</div>
+                <div id="networkDetails"></div>
+            </div>
+            
+            <button id="cancelWaiting" class="waiting-copy-btn" style="background-color: #dc3545; margin-top: 20px;">Отменить</button>
         </div>
 
         <!-- Секция размещения кораблей -->
@@ -641,7 +725,12 @@
             opponentReady: false,
             destroyedPlayerShips: [],
             destroyedEnemyShips: [],
-            turnCount: 0
+            turnCount: 0,
+            connectionAttempts: 0,
+            maxConnectionAttempts: 3,
+            connectionTimeout: null,
+            heartbeatInterval: null,
+            lastPingTime: 0
         };
 
         // Элементы DOM
@@ -679,7 +768,15 @@
             newGameButton: document.getElementById('newGameButton'),
             rulesToggle: document.getElementById('rulesToggle'),
             rulesContent: document.getElementById('rulesContent'),
-            rulesArrow: document.getElementById('rulesArrow')
+            rulesArrow: document.getElementById('rulesArrow'),
+            connectionTroubleshoot: document.getElementById('connectionTroubleshoot'),
+            retryConnectionBtn: document.getElementById('retryConnection'),
+            connectionErrorMessage: document.getElementById('connectionErrorMessage'),
+            connectionStatusIcon: document.getElementById('connectionStatusIcon'),
+            connectionStatusText: document.getElementById('connectionStatusText'),
+            networkInfo: document.getElementById('networkInfo'),
+            networkDetails: document.getElementById('networkDetails'),
+            cancelWaitingBtn: document.getElementById('cancelWaiting')
         };
 
         // Инициализация игрового поля
@@ -1193,36 +1290,185 @@
             elements.gameStatus.textContent = message;
         }
 
-        // Инициализация PeerJS соединения
+        // Получение информации о сети пользователя
+        async function getNetworkInfo() {
+            let networkInfo = "Тип соединения: ";
+            
+            // Проверка типа соединения (если доступно)
+            if (navigator.connection) {
+                networkInfo += navigator.connection.effectiveType || "неизвестно";
+                
+                if (navigator.connection.downlink) {
+                    networkInfo += `<br>Скорость: ~${navigator.connection.downlink} Мбит/с`;
+                }
+                
+                if (navigator.connection.rtt) {
+                    networkInfo += `<br>RTT: ${navigator.connection.rtt} мс`;
+                }
+            } else {
+                networkInfo += "информация недоступна";
+            }
+            
+            // Проверка IP-адреса (по внешнему API, может не работать)
+            try {
+                const ipResponse = await fetch('https://api.ipify.org?format=json', { 
+                    method: 'GET',
+                    mode: 'cors',
+                    cache: 'no-cache',
+                    timeout: 3000
+                });
+                
+                if (ipResponse.ok) {
+                    const ipData = await ipResponse.json();
+                    networkInfo += `<br>IP: ${ipData.ip}`;
+                }
+            } catch (error) {
+                console.log('Не удалось получить IP-адрес:', error);
+            }
+            
+            return networkInfo;
+        }
+
+        // Инициализация PeerJS соединения с улучшенной конфигурацией
         async function initializePeer() {
             return new Promise((resolve, reject) => {
                 try {
+                    updateConnectionStatus('connecting', 'Инициализация соединения...');
+                    
+                    // Получаем информацию о сети
+                    getNetworkInfo().then(info => {
+                        elements.networkDetails.innerHTML = info;
+                        elements.networkInfo.classList.remove('hidden');
+                    });
+                    
+                    // Настроенный для лучшей работы на мобильных устройствах PeerJS
                     const peer = new Peer({
+                        debug: 3, // Более подробные логи для отладки
                         config: {
                             'iceServers': [
+                                // STUN серверы
                                 { urls: 'stun:stun.l.google.com:19302' },
                                 { urls: 'stun:stun1.l.google.com:19302' },
                                 { urls: 'stun:stun2.l.google.com:19302' },
                                 { urls: 'stun:stun3.l.google.com:19302' },
-                                { urls: 'stun:stun4.l.google.com:19302' }
-                            ]
-                        }
+                                { urls: 'stun:stun4.l.google.com:19302' },
+                                // Публичные TURN серверы (для обхода NAT)
+                                {
+                                    urls: 'turn:numb.viagenie.ca',
+                                    credential: 'muazkh',
+                                    username: 'webrtc@live.com'
+                                },
+                                {
+                                    urls: 'turn:openrelay.metered.ca:80',
+                                    username: 'openrelayproject',
+                                    credential: 'openrelayproject'
+                                },
+                                {
+                                    urls: 'turn:relay.backups.cz',
+                                    credential: 'webrtc',
+                                    username: 'webrtc'
+                                }
+                            ],
+                            // Настройки ICE для лучшей работы через NAT
+                            'iceTransportPolicy': 'all',
+                            'sdpSemantics': 'unified-plan'
+                        },
+                        // Увеличенные таймауты для мобильного соединения
+                        pingInterval: 3000,
+                        retryTimes: 3,
+                        reconnectionDelay: 1000
                     });
                     
+                    // Установка таймаута для инициализации
+                    const initTimeout = setTimeout(() => {
+                        updateConnectionStatus('error', 'Таймаут инициализации. Попробуйте еще раз.');
+                        peer.destroy();
+                        reject(new Error('Initialization timeout'));
+                    }, 15000);
+                    
                     peer.on('open', (id) => {
+                        clearTimeout(initTimeout);
                         console.log('Peer ID:', id);
+                        updateConnectionStatus('connected', 'Соединение установлено!');
                         resolve(peer);
                     });
                     
                     peer.on('error', (error) => {
+                        clearTimeout(initTimeout);
                         console.error('Peer error:', error);
+                        
+                        let errorMessage = 'Ошибка соединения.';
+                        
+                        if (error.type === 'peer-unavailable') {
+                            errorMessage = 'Игрок с указанным ID не найден. Проверьте ID и попробуйте снова.';
+                        } else if (error.type === 'network' || error.type === 'disconnected') {
+                            errorMessage = 'Проблема с сетью. Проверьте подключение к интернету.';
+                        } else if (error.type === 'server-error') {
+                            errorMessage = 'Ошибка сервера. Попробуйте позже.';
+                        } else if (error.type === 'browser-incompatible') {
+                            errorMessage = 'Ваш браузер не поддерживает WebRTC. Используйте современный браузер.';
+                        }
+                        
+                        updateConnectionStatus('error', errorMessage);
+                        
+                        elements.connectionTroubleshoot.style.display = 'block';
+                        elements.connectionErrorMessage.textContent = errorMessage;
+                        
                         reject(error);
                     });
                 } catch (error) {
                     console.error('Failed to initialize peer:', error);
+                    updateConnectionStatus('error', 'Ошибка инициализации соединения');
                     reject(error);
                 }
             });
+        }
+
+        // Обновление статуса соединения в интерфейсе
+        function updateConnectionStatus(status, message) {
+            elements.connectionStatusIcon.className = 'connection-status';
+            
+            switch(status) {
+                case 'connecting':
+                    elements.connectionStatusIcon.classList.add('status-connecting');
+                    break;
+                case 'connected':
+                    elements.connectionStatusIcon.classList.add('status-connected');
+                    break;
+                case 'error':
+                    elements.connectionStatusIcon.classList.add('status-error');
+                    break;
+            }
+            
+            elements.connectionStatusText.textContent = message;
+        }
+
+        // Настройка механизма проверки соединения (heartbeat)
+        function setupHeartbeat() {
+            if (gameData.heartbeatInterval) {
+                clearInterval(gameData.heartbeatInterval);
+            }
+            
+            gameData.lastPingTime = Date.now();
+            
+            // Отправлять пинг каждые 5 секунд
+            gameData.heartbeatInterval = setInterval(() => {
+                if (gameData.connection && gameData.connection.open) {
+                    try {
+                        sendData({ type: 'ping', time: Date.now() });
+                        
+                        // Если не получили ответ на пинг более 15 секунд, соединение может быть потеряно
+                        if (Date.now() - gameData.lastPingTime > 15000) {
+                            console.warn('No ping response for 15 seconds, connection may be lost');
+                            updateConnectionStatus('error', 'Возможно, соединение потеряно...');
+                        }
+                    } catch (e) {
+                        console.error('Failed to send heartbeat:', e);
+                    }
+                } else {
+                    clearInterval(gameData.heartbeatInterval);
+                }
+            }, 5000);
         }
 
         // Создание новой игры
@@ -1232,6 +1478,28 @@
                 elements.joinGameBtn.disabled = true;
                 elements.waitingOverlay.classList.remove('hidden');
                 elements.waitingMessage.textContent = 'Инициализация соединения...';
+                
+                gameData.connectionAttempts = 0;
+                createGameWithRetry();
+            } catch (error) {
+                console.error('Failed to create game:', error);
+                elements.createGameBtn.disabled = false;
+                elements.joinGameBtn.disabled = false;
+                elements.waitingOverlay.classList.add('hidden');
+                elements.connectionTroubleshoot.style.display = 'block';
+                showConnectionError('Не удалось создать игру: ' + error.message);
+            }
+        }
+
+        // Создание игры с механизмом повторных попыток
+        async function createGameWithRetry() {
+            try {
+                if (gameData.connectionAttempts >= gameData.maxConnectionAttempts) {
+                    throw new Error('Достигнуто максимальное количество попыток');
+                }
+                
+                gameData.connectionAttempts++;
+                elements.waitingMessage.textContent = `Попытка соединения ${gameData.connectionAttempts}/${gameData.maxConnectionAttempts}...`;
                 
                 gameData.peer = await initializePeer();
                 gameData.isHost = true;
@@ -1245,10 +1513,26 @@
                 elements.waitingGameId.textContent = gameId;
                 elements.waitingGameIdSection.classList.remove('hidden');
                 
+                // Установка таймаута для ожидания подключения
+                if (gameData.connectionTimeout) {
+                    clearTimeout(gameData.connectionTimeout);
+                }
+                
+                gameData.connectionTimeout = setTimeout(() => {
+                    if (!gameData.connection) {
+                        elements.connectionTroubleshoot.style.display = 'block';
+                        elements.waitingMessage.textContent = 'Время ожидания подключения истекло.';
+                        updateConnectionStatus('error', 'Время ожидания истекло');
+                    }
+                }, 60000); // 1 минута ожидания
+                
                 gameData.peer.on('connection', (conn) => {
                     console.log('Incoming connection from:', conn.peer);
+                    clearTimeout(gameData.connectionTimeout);
+                    
                     gameData.connection = conn;
                     setupConnectionHandlers();
+                    setupHeartbeat();
                     
                     elements.waitingOverlay.classList.add('hidden');
                     elements.connectionSection.classList.add('hidden');
@@ -1259,12 +1543,32 @@
                     initializeShipIndicators();
                 });
             } catch (error) {
-                console.error('Failed to create game:', error);
-                elements.createGameBtn.disabled = false;
-                elements.joinGameBtn.disabled = false;
-                elements.waitingOverlay.classList.add('hidden');
-                alert('Не удалось создать игру. Пожалуйста, попробуйте еще раз.');
+                console.error(`Connection attempt ${gameData.connectionAttempts} failed:`, error);
+                
+                if (gameData.connectionAttempts < gameData.maxConnectionAttempts) {
+                    // Ждем перед следующей попыткой (увеличивая время с каждой попыткой)
+                    const delay = 2000 * gameData.connectionAttempts;
+                    elements.waitingMessage.textContent = `Повторная попытка через ${delay/1000} секунд...`;
+                    
+                    setTimeout(() => {
+                        createGameWithRetry();
+                    }, delay);
+                } else {
+                    // Если все попытки не удались
+                    elements.waitingOverlay.classList.add('hidden');
+                    elements.createGameBtn.disabled = false;
+                    elements.joinGameBtn.disabled = false;
+                    
+                    elements.connectionTroubleshoot.style.display = 'block';
+                    showConnectionError('Не удалось установить соединение после нескольких попыток.');
+                }
             }
+        }
+
+        // Отображение ошибки соединения
+        function showConnectionError(message) {
+            elements.connectionErrorMessage.textContent = message;
+            elements.connectionTroubleshoot.style.display = 'block';
         }
 
         // Присоединение к игре
@@ -1285,15 +1589,52 @@
                 elements.waitingOverlay.classList.remove('hidden');
                 elements.waitingMessage.textContent = 'Подключение к игре...';
                 
+                gameData.connectionAttempts = 0;
+                connectToGameWithRetry(gameId);
+            } catch (error) {
+                console.error('Failed to join game:', error);
+                elements.connectToGameBtn.disabled = false;
+                elements.waitingOverlay.classList.add('hidden');
+                
+                elements.connectionTroubleshoot.style.display = 'block';
+                showConnectionError('Не удалось присоединиться к игре: ' + error.message);
+            }
+        }
+
+        // Подключение к игре с механизмом повторных попыток
+        async function connectToGameWithRetry(gameId) {
+            try {
+                if (gameData.connectionAttempts >= gameData.maxConnectionAttempts) {
+                    throw new Error('Достигнуто максимальное количество попыток');
+                }
+                
+                gameData.connectionAttempts++;
+                elements.waitingMessage.textContent = `Попытка соединения ${gameData.connectionAttempts}/${gameData.maxConnectionAttempts}...`;
+                
                 gameData.peer = await initializePeer();
                 gameData.isHost = false;
                 
-                const conn = gameData.peer.connect(gameId);
-                gameData.connection = conn;
+                const conn = gameData.peer.connect(gameId, {
+                    reliable: true,
+                    serialization: 'json',
+                    retryTimes: 3
+                });
+                
+                // Установка таймаута для подключения
+                const connectionTimeout = setTimeout(() => {
+                    if (!conn.open) {
+                        conn.close();
+                        throw new Error('Таймаут подключения');
+                    }
+                }, 10000);
                 
                 conn.on('open', () => {
+                    clearTimeout(connectionTimeout);
                     console.log('Connected to host:', gameId);
+                    
+                    gameData.connection = conn;
                     setupConnectionHandlers();
+                    setupHeartbeat();
                     
                     elements.waitingOverlay.classList.add('hidden');
                     elements.connectionSection.classList.add('hidden');
@@ -1305,16 +1646,29 @@
                 });
                 
                 conn.on('error', (error) => {
+                    clearTimeout(connectionTimeout);
                     console.error('Connection error:', error);
-                    elements.connectToGameBtn.disabled = false;
-                    elements.waitingOverlay.classList.add('hidden');
-                    alert('Не удалось подключиться к игре. Пожалуйста, проверьте ID и попробуйте еще раз.');
+                    throw error;
                 });
             } catch (error) {
-                console.error('Failed to join game:', error);
-                elements.connectToGameBtn.disabled = false;
-                elements.waitingOverlay.classList.add('hidden');
-                alert('Не удалось присоединиться к игре. Пожалуйста, попробуйте еще раз.');
+                console.error(`Connection attempt ${gameData.connectionAttempts} failed:`, error);
+                
+                if (gameData.connectionAttempts < gameData.maxConnectionAttempts) {
+                    // Ждем перед следующей попыткой (увеличивая время с каждой попыткой)
+                    const delay = 2000 * gameData.connectionAttempts;
+                    elements.waitingMessage.textContent = `Повторная попытка через ${delay/1000} секунд...`;
+                    
+                    setTimeout(() => {
+                        connectToGameWithRetry(gameId);
+                    }, delay);
+                } else {
+                    // Если все попытки не удались
+                    elements.waitingOverlay.classList.add('hidden');
+                    elements.connectToGameBtn.disabled = false;
+                    
+                    elements.connectionTroubleshoot.style.display = 'block';
+                    showConnectionError('Не удалось подключиться к игре после нескольких попыток.');
+                }
             }
         }
 
@@ -1361,23 +1715,42 @@
                         alert('Противник отклонил предложение сыграть еще раз.');
                         elements.newGameButton.disabled = false;
                         break;
+                    case 'ping':
+                        // Ответ на ping для проверки соединения
+                        sendData({ type: 'pong', time: data.time });
+                        break;
+                    case 'pong':
+                        // Получен ответ на ping
+                        gameData.lastPingTime = Date.now();
+                        const latency = Date.now() - data.time;
+                        console.log(`Ping latency: ${latency}ms`);
+                        break;
                 }
             });
             
             gameData.connection.on('close', () => {
                 console.log('Connection closed');
-                handleDisconnect();
+                handleDisconnect('Соединение с противником закрыто.');
             });
             
             gameData.connection.on('error', (error) => {
                 console.error('Connection error:', error);
-                handleDisconnect();
+                handleDisconnect('Ошибка соединения с противником.');
             });
         }
 
         // Обработка отключения противника
-        function handleDisconnect() {
-            alert('Соединение с противником потеряно.');
+        function handleDisconnect(message = 'Соединение с противником потеряно.') {
+            // Очистка интервалов и таймаутов
+            if (gameData.heartbeatInterval) {
+                clearInterval(gameData.heartbeatInterval);
+            }
+            
+            if (gameData.connectionTimeout) {
+                clearTimeout(gameData.connectionTimeout);
+            }
+            
+            alert(message);
             
             // Вернуться к начальному экрану
             elements.connectionSection.classList.remove('hidden');
@@ -1402,9 +1775,16 @@
         // Отправка данных противнику
         function sendData(data) {
             if (gameData.connection && gameData.connection.open) {
-                gameData.connection.send(data);
+                try {
+                    gameData.connection.send(data);
+                    return true;
+                } catch (error) {
+                    console.error('Failed to send data:', error);
+                    return false;
+                }
             } else {
                 console.error('Cannot send data: connection not open');
+                return false;
             }
         }
 
@@ -1563,7 +1943,20 @@
                 })
                 .catch(err => {
                     console.error('Failed to copy:', err);
-                    alert('Не удалось скопировать ID. Пожалуйста, скопируйте его вручную.');
+                    // Резервный метод для старых браузеров
+                    const tempInput = document.createElement('input');
+                    tempInput.style.position = 'absolute';
+                    tempInput.style.left = '-1000px';
+                    tempInput.value = gameId;
+                    document.body.appendChild(tempInput);
+                    tempInput.select();
+                    document.execCommand('copy');
+                    document.body.removeChild(tempInput);
+                    
+                    elements.copyIdBtn.textContent = 'Скопировано!';
+                    setTimeout(() => {
+                        elements.copyIdBtn.textContent = 'Копировать';
+                    }, 2000);
                 });
         }
 
@@ -1581,7 +1974,20 @@
                 })
                 .catch(err => {
                     console.error('Failed to copy:', err);
-                    alert('Не удалось скопировать код. Пожалуйста, скопируйте его вручную.');
+                    // Резервный метод для старых браузеров
+                    const tempInput = document.createElement('input');
+                    tempInput.style.position = 'absolute';
+                    tempInput.style.left = '-1000px';
+                    tempInput.value = elements.waitingGameId.textContent;
+                    document.body.appendChild(tempInput);
+                    tempInput.select();
+                    document.execCommand('copy');
+                    document.body.removeChild(tempInput);
+                    
+                    elements.waitingCopyBtn.textContent = 'Скопировано!';
+                    setTimeout(() => {
+                        elements.waitingCopyBtn.textContent = 'Копировать код';
+                    }, 2000);
                 });
         });
         elements.connectToGameBtn.addEventListener('click', connectToGame);
@@ -1593,6 +1999,29 @@
         elements.resetPlacementBtn.addEventListener('click', resetPlacement);
         elements.readyBtn.addEventListener('click', sendReady);
         elements.newGameButton.addEventListener('click', requestNewGame);
+        elements.retryConnectionBtn.addEventListener('click', () => {
+            elements.connectionTroubleshoot.style.display = 'none';
+            if (gameData.isHost) {
+                createGame();
+            } else {
+                connectToGame();
+            }
+        });
+        elements.cancelWaitingBtn.addEventListener('click', () => {
+            elements.waitingOverlay.classList.add('hidden');
+            elements.createGameBtn.disabled = false;
+            elements.joinGameBtn.disabled = false;
+            elements.connectToGameBtn.disabled = false;
+            
+            if (gameData.connectionTimeout) {
+                clearTimeout(gameData.connectionTimeout);
+            }
+            
+            if (gameData.peer) {
+                gameData.peer.destroy();
+                gameData.peer = null;
+            }
+        });
         
         // Выбор размера корабля
         elements.shipOptions.forEach(option => {
