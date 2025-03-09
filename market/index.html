@@ -1,0 +1,423 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Мои профили на торговых площадках</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Montserrat:wght@300;400;500;600;700&display=swap');
+        
+        :root {
+            --primary-gradient: linear-gradient(135deg, #6e8efb, #a777e3);
+            --secondary-gradient: linear-gradient(135deg, #42e695, #3bb2b8);
+            --warning-gradient: linear-gradient(135deg, #ffb347, #ffcc33);
+            --card-shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
+            --hover-shadow: 0 15px 35px rgba(0, 0, 0, 0.15);
+            --transition: all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+        }
+        
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Montserrat', sans-serif;
+            background-color: #f8f9fc;
+            color: #333;
+            line-height: 1.6;
+            min-height: 100vh;
+            background-image: radial-gradient(circle at 50% 50%, rgba(110, 142, 251, 0.1) 0%, rgba(167, 119, 227, 0.05) 100%);
+            background-attachment: fixed;
+        }
+        
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 60px 20px;
+        }
+        
+        header {
+            text-align: center;
+            margin-bottom: 80px;
+            position: relative;
+        }
+        
+        header::after {
+            content: '';
+            position: absolute;
+            bottom: -30px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 60px;
+            height: 4px;
+            background: var(--primary-gradient);
+            border-radius: 2px;
+        }
+        
+        h1 {
+            font-size: 3.2rem;
+            font-weight: 700;
+            margin-bottom: 20px;
+            background: var(--primary-gradient);
+            -webkit-background-clip: text;
+            background-clip: text;
+            -webkit-text-fill-color: transparent;
+            text-shadow: 0px 2px 4px rgba(0, 0, 0, 0.1);
+        }
+        
+        .subtitle {
+            font-size: 1.2rem;
+            color: #6c757d;
+            max-width: 700px;
+            margin: 0 auto 40px;
+            font-weight: 400;
+        }
+        
+        .profiles {
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: center;
+            gap: 40px;
+            perspective: 1000px;
+        }
+        
+        .profile-card {
+            background-color: white;
+            border-radius: 16px;
+            box-shadow: var(--card-shadow);
+            overflow: hidden;
+            width: 320px;
+            position: relative;
+            transition: var(--transition);
+            transform-style: preserve-3d;
+            border: 1px solid rgba(255, 255, 255, 0.8);
+        }
+        
+        .profile-card:hover {
+            transform: translateY(-15px) rotateX(5deg);
+            box-shadow: var(--hover-shadow);
+        }
+        
+        .profile-card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 5px;
+            z-index: 1;
+        }
+        
+        .profile-card.active::before {
+            background: var(--secondary-gradient);
+        }
+        
+        .profile-card.coming-soon::before {
+            background: var(--warning-gradient);
+        }
+        
+        .card-header {
+            padding: 30px 30px 15px;
+            position: relative;
+        }
+        
+        .card-icon {
+            font-size: 2.2rem;
+            margin-bottom: 15px;
+            display: inline-block;
+            width: 60px;
+            height: 60px;
+            line-height: 60px;
+            text-align: center;
+            border-radius: 50%;
+            color: white;
+        }
+        
+        .active .card-icon {
+            background: var(--secondary-gradient);
+            box-shadow: 0 5px 15px rgba(66, 230, 149, 0.3);
+        }
+        
+        .coming-soon .card-icon {
+            background: var(--warning-gradient);
+            box-shadow: 0 5px 15px rgba(255, 179, 71, 0.3);
+        }
+        
+        .card-body {
+            padding: 15px 30px 30px;
+        }
+        
+        .card-footer {
+            padding: 20px 30px;
+            background-color: #f8f9fa;
+            text-align: center;
+            border-top: 1px solid rgba(0, 0, 0, 0.05);
+        }
+        
+        h2 {
+            font-size: 1.6rem;
+            margin-bottom: 10px;
+            color: #2c3e50;
+            font-weight: 600;
+        }
+        
+        p {
+            color: #6c757d;
+            font-size: 1rem;
+            font-weight: 400;
+            margin-bottom: 20px;
+        }
+        
+        .status {
+            display: inline-block;
+            padding: 8px 18px;
+            border-radius: 30px;
+            font-size: 0.8rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            margin-bottom: 15px;
+        }
+        
+        .status.active {
+            background-color: rgba(66, 230, 149, 0.1);
+            color: #1db954;
+            border: 1px solid rgba(66, 230, 149, 0.3);
+        }
+        
+        .status.coming-soon {
+            background-color: rgba(255, 179, 71, 0.1);
+            color: #ff8a00;
+            border: 1px solid rgba(255, 179, 71, 0.3);
+        }
+        
+        .btn {
+            display: inline-block;
+            padding: 12px 36px;
+            background: var(--primary-gradient);
+            color: white;
+            text-decoration: none;
+            border-radius: 30px;
+            font-weight: 600;
+            letter-spacing: 0.5px;
+            font-size: 0.9rem;
+            transition: transform 0.3s ease, box-shadow 0.3s ease;
+            position: relative;
+            z-index: 1;
+            box-shadow: 0 4px 15px rgba(110, 142, 251, 0.4);
+            border: none;
+            outline: none;
+            cursor: pointer;
+            text-transform: uppercase;
+            overflow: hidden;
+        }
+        
+        .btn::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(135deg, #a777e3, #6e8efb);
+            transition: opacity 0.3s ease;
+            z-index: -1;
+            opacity: 0;
+            border-radius: 30px;
+        }
+        
+        .btn:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 8px 25px rgba(110, 142, 251, 0.6);
+        }
+        
+        .btn:hover::before {
+            opacity: 1;
+        }
+        
+        .btn-disabled {
+            background: #e9ecef;
+            color: #adb5bd;
+            cursor: not-allowed;
+            box-shadow: none;
+        }
+        
+        .btn-disabled:hover {
+            transform: none;
+            box-shadow: none;
+        }
+        
+        .btn-disabled::before {
+            display: none;
+        }
+        
+        footer {
+            text-align: center;
+            margin-top: 100px;
+            padding: 30px;
+            color: #6c757d;
+            font-size: 0.9rem;
+            position: relative;
+        }
+        
+        footer::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 100px;
+            height: 1px;
+            background: linear-gradient(to right, transparent, rgba(0,0,0,0.1), transparent);
+        }
+        
+        /* Эффекты для карточек при загрузке страницы */
+        @keyframes fadeInUp {
+            from {
+                opacity: 0;
+                transform: translateY(30px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+        
+        .profile-card:nth-child(1) {
+            animation: fadeInUp 0.6s ease-out 0.2s forwards;
+        }
+        
+        .profile-card:nth-child(2) {
+            animation: fadeInUp 0.6s ease-out 0.4s forwards;
+        }
+        
+        .profile-card:nth-child(3) {
+            animation: fadeInUp 0.6s ease-out 0.6s forwards;
+        }
+        
+        .profile-card {
+            opacity: 0;
+        }
+        
+        /* Адаптивный дизайн */
+        @media (max-width: 768px) {
+            h1 {
+                font-size: 2.5rem;
+            }
+            
+            .subtitle {
+                font-size: 1rem;
+            }
+            
+            .profiles {
+                gap: 30px;
+            }
+            
+            .profile-card {
+                width: 100%;
+                max-width: 350px;
+            }
+        }
+        
+        /* Добавим стильный фон с градиентными кругами */
+        .bg-circle {
+            position: fixed;
+            border-radius: 50%;
+            filter: blur(80px);
+            z-index: -1;
+            opacity: 0.4;
+        }
+        
+        .bg-circle-1 {
+            top: 20%;
+            left: 10%;
+            width: 300px;
+            height: 300px;
+            background: rgba(110, 142, 251, 0.3);
+        }
+        
+        .bg-circle-2 {
+            bottom: 10%;
+            right: 15%;
+            width: 400px;
+            height: 400px;
+            background: rgba(167, 119, 227, 0.3);
+        }
+        
+        .bg-circle-3 {
+            top: 50%;
+            right: 25%;
+            width: 200px;
+            height: 200px;
+            background: rgba(66, 230, 149, 0.2);
+        }
+    </style>
+</head>
+<body>
+    <!-- Градиентные круги для фона -->
+    <div class="bg-circle bg-circle-1"></div>
+    <div class="bg-circle bg-circle-2"></div>
+    <div class="bg-circle bg-circle-3"></div>
+    
+    <div class="container">
+        <header>
+            <h1>Торговые профили</h1>
+            <div class="subtitle">Все мои профили на популярных торговых площадках в одном месте. Выбирайте подходящую платформу и переходите к покупкам.</div>
+        </header>
+        
+        <div class="profiles">
+            <!-- FunPay -->
+            <div class="profile-card active">
+                <div class="card-header">
+                    <div class="card-icon"><i class="fas fa-shopping-cart"></i></div>
+                    <h2>FunPay</h2>
+                    <span class="status active">Активен</span>
+                </div>
+                <div class="card-body">
+                    <p>Проверенный профиль с отличной репутацией. Здесь вы найдете все мои текущие предложения и сможете ознакомиться с отзывами покупателей.</p>
+                </div>
+                <div class="card-footer">
+                    <a href="#" class="btn">Перейти <i class="fas fa-arrow-right"></i></a>
+                </div>
+            </div>
+            
+            <!-- LOLZ Market -->
+            <div class="profile-card coming-soon">
+                <div class="card-header">
+                    <div class="card-icon"><i class="fas fa-store"></i></div>
+                    <h2>LOLZ Market</h2>
+                    <span class="status coming-soon">Скоро</span>
+                </div>
+                <div class="card-body">
+                    <p>Профиль на LOLZ Market находится в процессе создания. Совсем скоро здесь появятся уникальные предложения и акции.</p>
+                </div>
+                <div class="card-footer">
+                    <a href="#" class="btn btn-disabled">Ожидается</a>
+                </div>
+            </div>
+            
+            <!-- Plati.market -->
+            <div class="profile-card coming-soon">
+                <div class="card-header">
+                    <div class="card-icon"><i class="fas fa-coins"></i></div>
+                    <h2>Plati.market</h2>
+                    <span class="status coming-soon">Скоро</span>
+                </div>
+                <div class="card-body">
+                    <p>Мой профиль на Plati.market будет доступен в ближайшее время. Следите за обновлениями, чтобы не пропустить запуск.</p>
+                </div>
+                <div class="card-footer">
+                    <a href="#" class="btn btn-disabled">Ожидается</a>
+                </div>
+            </div>
+        </div>
+        
+        <footer>
+            <p>© 2025 Все права защищены | Обновлено: 9 марта 2025 г.</p>
+        </footer>
+    </div>
+</body>
+</html>
