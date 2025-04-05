@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Virtual Keyboard</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            background-color: #f0f0f0;
+            margin: 0;
+            padding: 20px;
+        }
+
+        .keyboard {
+            background-color: #d3d3d3;
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0 0 10px rgba(0,0,0,0.2);
+        }
+
+        .row {
+            display: flex;
+            gap: 5px;
+            margin-bottom: 5px;
+        }
+
+        .key {
+            background-color: white;
+            border: 1px solid #999;
+            border-radius: 5px;
+            padding: 15px 20px;
+            min-width: 30px;
+            text-align: center;
+            transition: all 0.1s;
+            cursor: pointer;
+            user-select: none;
+        }
+
+        .key.active {
+            background-color: #90EE90;
+            transform: scale(0.95);
+        }
+
+        .space {
+            width: 400px;
+        }
+
+        .special {
+            min-width: 60px;
+        }
+
+        .capslock.active {
+            background-color: #90EE90;
+        }
+    </style>
+</head>
+<body>
+    <h1>Keyboard</h1>
+    <div class="keyboard">
+        <div class="row">
+            <div class="key" data-code="Backquote">~</div>
+            <div class="key" data-code="Digit1">1</div>
+            <div class="key" data-code="Digit2">2</div>
+            <div class="key" data-code="Digit3">3</div>
+            <div class="key" data-code="Digit4">4</div>
+            <div class="key" data-code="Digit5">5</div>
+            <div class="key" data-code="Digit6">6</div>
+            <div class="key" data-code="Digit7">7</div>
+            <div class="key" data-code="Digit8">8</div>
+            <div class="key" data-code="Digit9">9</div>
+            <div class="key" data-code="Digit0">0</div>
+            <div class="key" data-code="Minus">-</div>
+            <div class="key" data-code="Equal">=</div>
+            <div class="key special" data-code="Backspace">Backspace</div>
+        </div>
+        <div class="row">
+            <div class="key special" data-code="Tab">Tab</div>
+            <div class="key" data-code="KeyQ">Q</div>
+            <div class="key" data-code="KeyW">W</div>
+            <div class="key" data-code="KeyE">E</div>
+            <div class="key" data-code="KeyR">R</div>
+            <div class="key" data-code="KeyT">T</div>
+            <div class="key" data-code="KeyY">Y</div>
+            <div class="key" data-code="KeyU">U</div>
+            <div class="key" data-code="KeyI">I</div>
+            <div class="key" data-code="KeyO">O</div>
+            <div class="key" data-code="KeyP">P</div>
+            <div class="key" data-code="BracketLeft">[</div>
+            <div class="key" data-code="BracketRight">]</div>
+            <div class="key" data-code="Backslash">\</div>
+        </div>
+        <div class="row">
+            <div class="key special caps" data-code="CapsLock">Caps Lock</div>
+            <div class="key" data-code="KeyA">A</div>
+            <div class="key" data-code="KeyS">S</div>
+            <div class="key" data-code="KeyD">D</div>
+            <div class="key" data-code="KeyF">F</div>
+            <div class="key" data-code="KeyG">G</div>
+            <div class="key" data-code="KeyH">H</div>
+            <div class="key" data-code="KeyJ">J</div>
+            <div class="key" data-code="KeyK">K</div>
+            <div class="key" data-code="KeyL">L</div>
+            <div class="key" data-code="Semicolon">;</div>
+            <div class="key" data-code="Quote">'</div>
+            <div class="key special" data-code="Enter">Enter</div>
+        </div>
+        <div class="row">
+            <div class="key special" data-code="ShiftLeft">Shift</div>
+            <div class="key" data-code="KeyZ">Z</div>
+            <div class="key" data-code="KeyX">X</div>
+            <div class="key" data-code="KeyC">C</div>
+            <div class="key" data-code="KeyV">V</div>
+            <div class="key" data-code="KeyB">B</div>
+            <div class="key" data-code="KeyN">N</div>
+            <div class="key" data-code="KeyM">M</div>
+            <div class="key" data-code="Comma">,</div>
+            <div class="key" data-code="Period">.</div>
+            <div class="key" data-code="Slash">/</div>
+            <div class="key special" data-code="ShiftRight">Shift</div>
+        </div>
+        <div class="row">
+            <div class="key special" data-code="ControlLeft">Ctrl</div>
+            <div class="key special" data-code="MetaLeft">Win</div>
+            <div class="key special" data-code="AltLeft">Alt</div>
+            <div class="key space" data-code="Space"> </div>
+            <div class="key special" data-code="AltRight">Alt</div>
+            <div class="key special" data-code="MetaRight">Win</div>
+            <div class="key special" data-code="ControlRight">Ctrl</div>
+        </div>
+    </div>
+
+    <script>
+        const keys = document.querySelectorAll('.key');
+        
+        // Соответствие между кодами клавиш и элементами
+        const keyMap = {};
+        keys.forEach(key => {
+            const code = key.dataset.code;
+            keyMap[code] = key;
+        });
+
+        function handleKeyDown(event) {
+            const keyElement = keyMap[event.code];
+            if (keyElement) {
+                keyElement.classList.add('active');
+            }
+        }
+
+        function handleKeyUp(event) {
+            const keyElement = keyMap[event.code];
+            if (keyElement) {
+                keyElement.classList.remove('active');
+            }
+        }
+
+        // Обработчики событий
+        window.addEventListener('keydown', handleKeyDown);
+        window.addEventListener('keyup', handleKeyUp);
+
+        // Обработка состояния Caps Lock
+        window.addEventListener('keydown', (event) => {
+            if (event.code === 'CapsLock') {
+                const capsKey = keyMap['CapsLock'];
+                capsKey.classList.toggle('active');
+            }
+        });
+    </script>
+</body>
+</html>
