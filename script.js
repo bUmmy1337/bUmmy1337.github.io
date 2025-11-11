@@ -45,7 +45,7 @@ document.addEventListener('DOMContentLoaded', () => {
                             children: {
                                 'portfolio.txt': {
                                     type: 'file',
-                                    content: 'Welcome to my Arch Linux Portfolio!\nType \'help\' for available commands.\n'
+                                    content: 'Welcome to bummylnx!\nType \'help\' for available commands.\n'
                                 },
                                 'projects': {
                                     type: 'directory',
@@ -53,7 +53,7 @@ document.addEventListener('DOMContentLoaded', () => {
                                 },
                                 'about.txt': {
                                     type: 'file',
-                                    content: 'Hello! I\'m a software engineer with a passion for creating robust and scalable applications. I enjoy working with various technologies and constantly learning new things.\n\nThis portfolio is designed to mimic an Arch Linux desktop environment, showcasing my projects in a unique way.'
+                                    content: 'Hello! I\'m a software engineer with a passion for creating robust and scalable applications. I enjoy working with various technologies and constantly learning new things.\n\nThis portfolio is designed to mimic a desktop environment, showcasing my projects in a unique way.'
                                 }
                             }
                         }
@@ -680,7 +680,7 @@ document.addEventListener('DOMContentLoaded', () => {
         githubReposDiv.innerHTML = `
             <h2>About Me</h2>
             <p>Hello! I'm a software engineer with a passion for creating robust and scalable applications. I enjoy working with various technologies and constantly learning new things.</p>
-            <p>This portfolio is designed to mimic an desktop environment, showcasing my projects in a unique way.</p>
+            <p>This portfolio is designed to mimic a desktop environment, showcasing my projects in a unique way.</p>
         `;
     }
 
