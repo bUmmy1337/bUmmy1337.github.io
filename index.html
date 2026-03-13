@@ -1,132 +1,364 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>b u m m y 1 3 3 7</title>
+    <title>bummylnx — Desktop</title>
+    <meta name="description" content="bummylnx — a portfolio Linux distribution desktop by bUmmy1337">
+    <link rel="icon" href="assets/logo.png" type="image/png">
     <link rel="stylesheet" href="style.css">
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
-    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script> <!-- Marked.js for Markdown parsing -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link
+        href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap"
+        rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
 </head>
+
 <body>
-    <div class="desktop">
-        <canvas id="matrix-canvas"></canvas> <!-- Canvas for matrix effect -->
-        <div class="panel">
-            <div class="start-menu-button"><i class="fas fa-laptop-code"></i> bummy1337</div>
+    <div class="desktop" id="desktop">
+
+        <!-- === TOP PANEL (GNOME-style) === -->
+        <div class="top-panel" id="top-panel">
+            <div class="panel-left">
+                <span class="panel-activities" id="activities-btn">Activities</span>
+            </div>
             <div class="panel-center">
-                <span class="app-icon"><i class="fas fa-terminal"></i> Terminal</span>
-                <span class="app-icon"><i class="fas fa-globe"></i> Browser</span>
-                <span class="app-icon"><i class="fas fa-folder"></i> Files</span>
+                <span class="panel-clock" id="panel-clock"></span>
             </div>
             <div class="panel-right">
-                <span class="system-info" id="system-time"></span>
-                <span class="system-info"><i class="fas fa-volume-up"></i> 100%</span>
-            </div>
-        </div>
-
-        <div class="desktop-icons">
-            <div class="icon" id="terminal-icon">
-                <i class="fas fa-terminal fa-3x"></i>
-                <span>Terminal</span>
-            </div>
-            <div class="icon" id="github-icon">
-                <i class="fab fa-github fa-3x"></i>
-                <span>GitHub Repos</span>
-            </div>
-            <div class="icon" id="about-icon">
-                <i class="fas fa-user-circle fa-3x"></i>
-                <span>About Me</span>
-            </div>
-            <div class="icon" id="catshade-icon">
-                <img src="assets/catshade.png" alt="CatShade" style="width: 48px; height: 48px;">
-                <span>CatShade</span>
-            </div>
-            <div class="icon" id="minecraft-icon">
-                <i class="fas fa-cube fa-3x"></i>
-                <span>Minecraft</span>
-            </div>
-        </div>
-
-        <!-- System Monitoring Widgets -->
-        <div class="widget cpu-widget" id="cpu-widget">
-            <div class="widget-header">CPU Usage</div>
-            <div class="widget-body">
-                <pre id="cpu-output">Loading CPU data...</pre>
-            </div>
-        </div>
-
-        <div class="widget memory-widget" id="memory-widget">
-            <div class="widget-header">Memory Usage</div>
-            <div class="widget-body">
-                <pre id="mem-output">Loading Memory data...</pre>
-            </div>
-        </div>
-
-        <div class="widget network-widget" id="network-widget">
-            <div class="widget-header">Network Activity</div>
-            <div class="widget-body">
-                <pre id="net-output">Loading Network data...</pre>
-            </div>
-        </div>
-
-        <div class="window terminal-window" id="terminal-window">
-            <div class="window-header terminal-header">
-                <div class="window-buttons terminal-buttons">
-                    <span class="window-button close"></span>
-                    <span class="window-button minimize"></span>
-                    <span class="window-button maximize"></span>
-                </div>
-                <div class="window-title terminal-title">user@bummy1337:~$</div>
-            </div>
-            <div class="window-body terminal-body">
-                <div class="terminal-output">
-                    <span class="initial-message">Welcome to bummylnx Terminal!</span><br>
-                    <span class="initial-message">Type 'help' for available commands.</span><br><br>
-                </div>
-                <div class="terminal-input-line">
-                    <span class="prompt" id="current-prompt">user@bummy1337:/home/user$ </span><input type="text" id="terminal-input" class="terminal-input" autofocus>
+                <div class="panel-tray">
+                    <span class="tray-item" id="tray-lang">EN</span>
+                    <i class="fas fa-wifi tray-item"></i>
+                    <i class="fas fa-volume-up tray-item"></i>
+                    <i class="fas fa-battery-three-quarters tray-item"></i>
+                    <div class="tray-power-group" id="tray-power">
+                        <i class="fas fa-power-off"></i>
+                    </div>
                 </div>
             </div>
         </div>
 
-        <div class="window portfolio-window" id="portfolio-window">
-            <div class="window-header">
-                <div class="window-buttons">
-                    <span class="window-button close"></span>
-                    <span class="window-button minimize"></span>
-                    <span class="window-button maximize"></span>
+        <!-- === DESKTOP AREA === -->
+        <div class="desktop-area" id="desktop-area">
+            <!-- Desktop Icons -->
+            <div class="desktop-icons" id="desktop-icons">
+                <div class="desktop-icon" id="icon-terminal" data-window="terminal" tabindex="0">
+                    <div class="desktop-icon-img"><i class="fas fa-terminal"></i></div>
+                    <span>Terminal</span>
                 </div>
-                <div class="window-title">Portfolio Content</div>
-            </div>
-            <div class="window-body">
-                <div id="portfolio-content">
-                    <!-- Content will be loaded here dynamically -->
+                <div class="desktop-icon" id="icon-files" data-window="files" tabindex="0">
+                    <div class="desktop-icon-img"><i class="fas fa-folder"></i></div>
+                    <span>Files</span>
+                </div>
+                <div class="desktop-icon" id="icon-about" data-window="about" tabindex="0">
+                    <div class="desktop-icon-img"><i class="fas fa-address-card"></i></div>
+                    <span>About Me</span>
+                </div>
+                <div class="desktop-icon" id="icon-github" data-window="github" tabindex="0">
+                    <div class="desktop-icon-img"><i class="fab fa-github"></i></div>
+                    <span>GitHub</span>
+                </div>
+                <div class="desktop-icon" id="icon-catshade" tabindex="0">
+                    <div class="desktop-icon-img"><img src="assets/catshade.png" alt="CatShade"></div>
+                    <span>CatShade</span>
+                </div>
+                <div class="desktop-icon" id="icon-minecraft" tabindex="0">
+                    <div class="desktop-icon-img"><i class="fas fa-cube"></i></div>
+                    <span>Minecraft</span>
+                </div>
+                <div class="desktop-icon" id="icon-settings" data-window="settings" tabindex="0">
+                    <div class="desktop-icon-img"><i class="fas fa-cog"></i></div>
+                    <span>Settings</span>
                 </div>
             </div>
-        </div>
-    </div>
 
-    <div class="window repo-detail-window" id="repo-detail-window">
-        <div class="window-header">
-            <div class="window-buttons">
-                <span class="window-button close"></span>
-                <span class="window-button minimize"></span>
-                <span class="window-button maximize"></span>
+            <!-- === SYSTEM INFO WIDGET (conky-style) === -->
+            <div class="conky-widget" id="conky-widget">
+                <div class="conky-header">
+                    <span class="conky-distro">bummylnx</span>
+                    <span class="conky-kernel">6.6.6-zen</span>
+                </div>
+                <div class="conky-section">
+                    <div class="conky-label">CPU</div>
+                    <div class="conky-bars" id="conky-cpu"></div>
+                </div>
+                <div class="conky-section">
+                    <div class="conky-label">MEMORY</div>
+                    <div class="conky-mem-info" id="conky-mem"></div>
+                </div>
+                <div class="conky-section">
+                    <div class="conky-label">NETWORK</div>
+                    <div class="conky-net-info" id="conky-net"></div>
+                </div>
+                <div class="conky-section">
+                    <div class="conky-label">UPTIME</div>
+                    <div class="conky-uptime" id="conky-uptime"></div>
+                </div>
             </div>
-            <div class="window-title" id="repo-detail-title">Repository Details</div>
+
+            <!-- ============================================= -->
+            <!-- WINDOWS                                       -->
+            <!-- ============================================= -->
+
+            <!-- TERMINAL WINDOW -->
+            <div class="window" id="window-terminal" data-title="Terminal">
+                <div class="window-titlebar">
+                    <div class="window-controls">
+                        <button class="win-btn win-close" data-action="close"></button>
+                        <button class="win-btn win-minimize" data-action="minimize"></button>
+                        <button class="win-btn win-maximize" data-action="maximize"></button>
+                    </div>
+                    <span class="window-title">user@bummylnx: ~</span>
+                    <div class="window-controls-spacer"></div>
+                </div>
+                <div class="window-body terminal-body">
+                    <div class="term-output" id="term-output">
+                        <span class="term-welcome">Welcome to <span class="term-hl">bummylnx</span> Terminal</span>
+                        <span class="term-welcome">Type '<span class="term-hl">help</span>' for available
+                            commands.</span>
+                        <br>
+                    </div>
+                    <div class="term-input-line">
+                        <span class="term-prompt" id="term-prompt">user@bummylnx:<span class="term-path">~</span>$
+                        </span>
+                        <input type="text" id="term-input" class="term-input" spellcheck="false" autofocus>
+                    </div>
+                </div>
+            </div>
+
+            <!-- GITHUB REPOS WINDOW -->
+            <div class="window" id="window-github" data-title="GitHub Repositories">
+                <div class="window-titlebar">
+                    <div class="window-controls">
+                        <button class="win-btn win-close" data-action="close"></button>
+                        <button class="win-btn win-minimize" data-action="minimize"></button>
+                        <button class="win-btn win-maximize" data-action="maximize"></button>
+                    </div>
+                    <span class="window-title"><i class="fab fa-github"></i> GitHub Repositories</span>
+                    <div class="window-controls-spacer"></div>
+                </div>
+                <div class="window-body github-body">
+                    <div class="github-toolbar">
+                        <div class="github-search">
+                            <i class="fas fa-search"></i>
+                            <input type="text" id="github-search-input" placeholder="Search repositories...">
+                        </div>
+                        <div class="github-filters" id="github-filters">
+                            <button class="ghf-btn active" data-filter="all">All</button>
+                        </div>
+                    </div>
+                    <div class="github-repos-list" id="github-repos-list">
+                        <div class="github-loading">
+                            <i class="fas fa-circle-notch fa-spin"></i> Loading repositories...
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ABOUT ME WINDOW -->
+            <div class="window" id="window-about" data-title="About Me">
+                <div class="window-titlebar">
+                    <div class="window-controls">
+                        <button class="win-btn win-close" data-action="close"></button>
+                        <button class="win-btn win-minimize" data-action="minimize"></button>
+                        <button class="win-btn win-maximize" data-action="maximize"></button>
+                    </div>
+                    <span class="window-title"><i class="fas fa-address-card"></i> About Me</span>
+                    <div class="window-controls-spacer"></div>
+                </div>
+                <div class="window-body about-body">
+                    <div class="about-card">
+                        <div class="about-avatar">
+                            <img src="assets/logo.png" alt="bUmmy1337">
+                        </div>
+                        <div class="about-info">
+                            <h2>bUmmy1337</h2>
+                            <span class="about-role">Developer / Linux Enthusiast</span>
+                            <p class="about-bio">
+                                Hello! I'm a software developer with a passion for building creative projects.
+                                I love Linux, open source, and making things that work beautifully.
+                                This desktop is my portfolio — each icon and window represents a piece of my work.
+                            </p>
+                            <div class="about-links">
+                                <a href="https://github.com/bummy1337" target="_blank" class="about-link-btn">
+                                    <i class="fab fa-github"></i> GitHub
+                                </a>
+                                <a href="https://t.me/bummy1337" target="_blank" class="about-link-btn">
+                                    <i class="fab fa-telegram-plane"></i> Telegram
+                                </a>
+                                <a href="https://catshade.ru" target="_blank" class="about-link-btn">
+                                    <i class="fas fa-cat"></i> CatShade
+                                </a>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="about-details">
+                        <div class="about-detail-card">
+                            <div class="about-detail-icon"><i class="fas fa-laptop-code"></i></div>
+                            <h3>Tech Stack</h3>
+                            <div class="about-tags">
+                                <span class="tag">Python</span>
+                                <span class="tag">JavaScript</span>
+                                <span class="tag">C++</span>
+                                <span class="tag">HTML/CSS</span>
+                                <span class="tag">Linux</span>
+                                <span class="tag">Git</span>
+                            </div>
+                        </div>
+                        <div class="about-detail-card">
+                            <div class="about-detail-icon"><i class="fas fa-server"></i></div>
+                            <h3>System</h3>
+                            <div class="about-system-info">
+                                <div class="sys-row"><span>OS</span><span>bummylnx (Arch-based)</span></div>
+                                <div class="sys-row"><span>DE</span><span>Hyprland</span></div>
+                                <div class="sys-row"><span>CPU</span><span>AMD Ryzen 5 9600X</span></div>
+                                <div class="sys-row"><span>GPU</span><span>NVIDIA RTX 3060</span></div>
+                                <div class="sys-row"><span>RAM</span><span>32 GB DDR4</span></div>
+                            </div>
+                        </div>
+                        <div class="about-detail-card">
+                            <div class="about-detail-icon"><i class="fas fa-gamepad"></i></div>
+                            <h3>Projects</h3>
+                            <div class="about-projects-preview">
+                                <a href="https://catshade.ru" target="_blank" class="project-mini">
+                                    <img src="assets/catshade.png" alt="CatShade">
+                                    <span>CatShade</span>
+                                </a>
+                                <a href="https://launcher.bummy.ru" target="_blank" class="project-mini">
+                                    <i class="fas fa-cube"></i>
+                                    <span>LegacyMirror</span>
+                                </a>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- FILES WINDOW -->
+            <div class="window" id="window-files" data-title="File Manager">
+                <div class="window-titlebar">
+                    <div class="window-controls">
+                        <button class="win-btn win-close" data-action="close"></button>
+                        <button class="win-btn win-minimize" data-action="minimize"></button>
+                        <button class="win-btn win-maximize" data-action="maximize"></button>
+                    </div>
+                    <span class="window-title"><i class="fas fa-folder-open"></i> File Manager — /home/user</span>
+                    <div class="window-controls-spacer"></div>
+                </div>
+                <div class="window-body files-body">
+                    <div class="files-sidebar">
+                        <div class="files-sidebar-title">Places</div>
+                        <div class="files-sidebar-item active" data-path="/home/user"><i class="fas fa-home"></i> Home
+                        </div>
+                        <div class="files-sidebar-item" data-path="/home/user/projects"><i class="fas fa-folder"></i>
+                            Projects</div>
+                        <div class="files-sidebar-item" data-path="/home/user/documents"><i class="fas fa-file-alt"></i>
+                            Documents</div>
+                        <div class="files-sidebar-item" data-path="/"><i class="fas fa-hdd"></i> File System</div>
+                    </div>
+                    <div class="files-main" id="files-main">
+                        <!-- filled by JS -->
+                    </div>
+                </div>
+            </div>
+
+            <!-- SETTINGS WINDOW -->
+            <div class="window" id="window-settings" data-title="Settings">
+                <div class="window-titlebar">
+                    <div class="window-controls">
+                        <button class="win-btn win-close" data-action="close"></button>
+                        <button class="win-btn win-minimize" data-action="minimize"></button>
+                        <button class="win-btn win-maximize" data-action="maximize"></button>
+                    </div>
+                    <span class="window-title"><i class="fas fa-cog"></i> Settings</span>
+                    <div class="window-controls-spacer"></div>
+                </div>
+                <div class="window-body settings-body">
+                    <div class="settings-group">
+                        <h3><i class="fas fa-info-circle"></i> System Information</h3>
+                        <div class="settings-info-grid">
+                            <div class="settings-info-row"><span>Distribution</span><span>bummylnx</span></div>
+                            <div class="settings-info-row"><span>Version</span><span>2026.03 Rolling</span></div>
+                            <div class="settings-info-row"><span>Kernel</span><span>6.6.6-zen</span></div>
+                            <div class="settings-info-row"><span>Desktop</span><span>Hyprland</span></div>
+                            <div class="settings-info-row"><span>Window System</span><span>Wayland</span></div>
+                            <div class="settings-info-row"><span>Packages</span><span>1337 (pacman)</span></div>
+                        </div>
+                    </div>
+                    <div class="settings-group">
+                        <h3><i class="fas fa-microchip"></i> Hardware</h3>
+                        <div class="settings-info-grid">
+                            <div class="settings-info-row"><span>CPU</span><span>AMD Ryzen 5 9600X @ 4.9GHz</span></div>
+                            <div class="settings-info-row"><span>GPU</span><span>NVIDIA GeForce RTX 3060</span></div>
+                            <div class="settings-info-row"><span>Memory</span><span>32 GB DDR4</span></div>
+                            <div class="settings-info-row"><span>Storage</span><span>512 GB NVMe SSD</span></div>
+                        </div>
+                    </div>
+                    <div class="settings-group">
+                        <h3><i class="fas fa-paint-brush"></i> Appearance</h3>
+                        <div class="settings-appearance">
+                            <label class="settings-toggle">
+                                <span>Show Conky Widget</span>
+                                <input type="checkbox" id="toggle-conky" checked>
+                                <span class="toggle-slider"></span>
+                            </label>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- REPO DETAIL WINDOW (opens when clicking a repo) -->
+            <div class="window" id="window-repo-detail" data-title="Repository">
+                <div class="window-titlebar">
+                    <div class="window-controls">
+                        <button class="win-btn win-close" data-action="close"></button>
+                        <button class="win-btn win-minimize" data-action="minimize"></button>
+                        <button class="win-btn win-maximize" data-action="maximize"></button>
+                    </div>
+                    <span class="window-title" id="repo-detail-title"><i class="fab fa-github"></i> Repository</span>
+                    <div class="window-controls-spacer"></div>
+                </div>
+                <div class="window-body repo-detail-body">
+                    <div class="repo-tabs">
+                        <button class="repo-tab active" data-section="files"><i class="fas fa-folder"></i>
+                            Files</button>
+                        <button class="repo-tab" data-section="readme"><i class="fas fa-book"></i> README</button>
+                        <button class="repo-tab" data-section="releases"><i class="fas fa-tag"></i> Releases</button>
+                    </div>
+                    <div class="repo-detail-content" id="repo-detail-content">
+                        <!-- filled by JS -->
+                    </div>
+                </div>
+            </div>
+
+        </div><!-- /desktop-area -->
+
+        <!-- === BOTTOM DOCK === -->
+        <div class="dock" id="dock">
+            <div class="dock-item" data-window="terminal" data-tooltip="Terminal">
+                <i class="fas fa-terminal"></i>
+            </div>
+            <div class="dock-item" data-window="files" data-tooltip="Files">
+                <i class="fas fa-folder"></i>
+            </div>
+            <div class="dock-item" data-window="github" data-tooltip="GitHub">
+                <i class="fab fa-github"></i>
+            </div>
+            <div class="dock-item" data-window="about" data-tooltip="About Me">
+                <i class="fas fa-address-card"></i>
+            </div>
+            <div class="dock-separator"></div>
+            <div class="dock-item" data-window="settings" data-tooltip="Settings">
+                <i class="fas fa-cog"></i>
+            </div>
         </div>
-        <div class="window-body repo-detail-body">
-            <div class="repo-detail-nav">
-                <span class="repo-detail-nav-item active" data-section="files">Files</span>
-                <span class="repo-detail-nav-item" data-section="readme">README</span>
-                <span class="repo-detail-nav-item" data-section="releases">Releases</span>
-            </div>
-            <div class="repo-detail-content" id="repo-detail-content">
-                <!-- Content will be loaded here dynamically -->
-            </div>
-        </div>
-    </div>
+
+    </div><!-- /desktop -->
 
     <script src="script.js"></script>
 </body>
+
 </html>

@@ -1,861 +1,830 @@
+/**
+ * bummylnx Desktop — JavaScript
+ * Window management, terminal, GitHub API, Conky widget, file manager
+ */
+
 document.addEventListener('DOMContentLoaded', () => {
-    const githubReposDiv = document.getElementById('portfolio-content');
-    const terminalOutput = document.querySelector('.terminal-output');
-    const terminalInput = document.getElementById('terminal-input');
-    const currentPromptSpan = document.getElementById('current-prompt');
-    const terminalWindow = document.getElementById('terminal-window');
-    const portfolioWindow = document.getElementById('portfolio-window');
-    const terminalIcon = document.getElementById('terminal-icon');
-    const githubIcon = document.getElementById('github-icon');
-    const aboutIcon = document.getElementById('about-icon');
-    const systemTimeSpan = document.getElementById('system-time');
-    const catshadeIcon = document.getElementById('catshade-icon'); // New: CatShade icon
-    const minecraftIcon = document.getElementById('minecraft-icon'); // New: Minecraft icon
 
-    // Repo Detail Window elements
-    const repoDetailWindow = document.getElementById('repo-detail-window');
-    const repoDetailTitle = document.getElementById('repo-detail-title');
-    const repoDetailContent = document.getElementById('repo-detail-content');
-    const repoDetailNavItems = document.querySelectorAll('.repo-detail-nav-item');
-
-    let currentRepo = null; // To store the currently viewed repository
-
-    // Widget elements
-    const cpuOutput = document.getElementById('cpu-output');
-    const memOutput = document.getElementById('mem-output');
-    const netOutput = document.getElementById('net-output');
-
+    // =============================
+    // GLOBAL STATE
+    // =============================
+    let zCounter = 10;
     let activeWindow = null;
+    let allRepos = [];
+    let currentRepo = null;
+
+    // Terminal state
+    const username = 'user';
+    const hostname = 'bummylnx';
+    let currentPath = '/home/user';
     let commandHistory = [];
     let historyIndex = -1;
-    const username = 'user';
-    const hostname = 'bummy1337'; // Updated hostname
-    let currentPath = '/home/user'; // Simulate current directory
 
-    // Simulate a file system
+    // =============================
+    // CLOCK
+    // =============================
+    const clockEl = document.getElementById('panel-clock');
+    function updateClock() {
+        const now = new Date();
+        const opts = { weekday: 'short', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false };
+        clockEl.textContent = now.toLocaleDateString('en-US', opts);
+    }
+    setInterval(updateClock, 1000);
+    updateClock();
+
+    // =============================
+    // CONKY WIDGET
+    // =============================
+    const conkyCpu = document.getElementById('conky-cpu');
+    const conkyMem = document.getElementById('conky-mem');
+    const conkyNet = document.getElementById('conky-net');
+    const conkyUptime = document.getElementById('conky-uptime');
+    const startTime = Date.now();
+
+    function updateConky() {
+        // CPU bars
+        let cpuHtml = '';
+        for (let i = 0; i < 8; i++) {
+            const pct = Math.floor(Math.random() * 80) + 5;
+            cpuHtml += `<div class="conky-bar-row">
+                <span>C${i}</span>
+                <div class="conky-bar-track"><div class="conky-bar-fill cpu-fill" style="width:${pct}%"></div></div>
+                <span>${pct}%</span>
+            </div>`;
+        }
+        conkyCpu.innerHTML = cpuHtml;
+
+        // Memory
+        const totalMem = 32;
+        const usedMem = (Math.random() * totalMem * 0.4 + 2).toFixed(1);
+        const memPct = ((usedMem / totalMem) * 100).toFixed(0);
+        conkyMem.innerHTML = `
+            <div class="conky-bar-row">
+                <span>${usedMem}G / ${totalMem}G</span>
+                <div class="conky-bar-track"><div class="conky-bar-fill mem-fill" style="width:${memPct}%"></div></div>
+                <span>${memPct}%</span>
+            </div>`;
+
+        // Network
+        const dl = (Math.random() * 800 + 50).toFixed(0);
+        const ul = (Math.random() * 200 + 10).toFixed(0);
+        conkyNet.innerHTML = `
+            <div class="conky-net-row"><span>▼ Download</span><span class="net-down">${dl} KB/s</span></div>
+            <div class="conky-net-row"><span>▲ Upload</span><span class="net-up">${ul} KB/s</span></div>`;
+
+        // Uptime
+        const elapsed = Math.floor((Date.now() - startTime) / 1000);
+        const mins = Math.floor(elapsed / 60);
+        const secs = elapsed % 60;
+        conkyUptime.textContent = `${mins}m ${secs}s`;
+    }
+
+    setInterval(updateConky, 2000);
+    updateConky();
+
+    // Toggle conky from settings
+    const toggleConky = document.getElementById('toggle-conky');
+    const conkyWidget = document.getElementById('conky-widget');
+    if (toggleConky) {
+        toggleConky.addEventListener('change', () => {
+            conkyWidget.style.opacity = toggleConky.checked ? '1' : '0';
+            conkyWidget.style.pointerEvents = toggleConky.checked ? 'auto' : 'none';
+        });
+    }
+
+    // =============================
+    // WINDOW MANAGEMENT
+    // =============================
+    const allWindows = document.querySelectorAll('.window');
+
+    function openWindow(id) {
+        const win = document.getElementById('window-' + id);
+        if (!win) return;
+        win.classList.add('open');
+        bringToFront(win);
+        updateDock();
+
+        // Auto-fetch for github window
+        if (id === 'github' && allRepos.length === 0) {
+            fetchGitHubRepos();
+        }
+
+        // Auto-populate files window
+        if (id === 'files') {
+            renderFileManager('/home/user');
+        }
+
+        // Focus terminal input
+        if (id === 'terminal') {
+            setTimeout(() => document.getElementById('term-input').focus(), 100);
+        }
+    }
+
+    function closeWindow(win) {
+        win.classList.remove('open');
+        win.classList.remove('maximized');
+        if (activeWindow === win) activeWindow = null;
+        updateDock();
+    }
+
+    function minimizeWindow(win) {
+        win.classList.remove('open');
+        // keep has-window dot in dock
+        updateDock();
+    }
+
+    function maximizeWindow(win) {
+        if (win.classList.contains('maximized')) {
+            // Restore
+            win.classList.remove('maximized');
+            win.style.width = win._origW || '';
+            win.style.height = win._origH || '';
+            win.style.top = win._origT || '';
+            win.style.left = win._origL || '';
+        } else {
+            win._origW = win.style.width || win.offsetWidth + 'px';
+            win._origH = win.style.height || win.offsetHeight + 'px';
+            win._origT = win.style.top || win.offsetTop + 'px';
+            win._origL = win.style.left || win.offsetLeft + 'px';
+            win.classList.add('maximized');
+            const panelH = 32;
+            const dockH = 80;
+            win.style.top = panelH + 'px';
+            win.style.left = '0';
+            win.style.width = '100vw';
+            win.style.height = `calc(100vh - ${panelH}px - ${dockH}px)`;
+        }
+    }
+
+    function bringToFront(win) {
+        allWindows.forEach(w => w.classList.remove('active'));
+        zCounter++;
+        win.style.zIndex = zCounter;
+        win.classList.add('active');
+        activeWindow = win;
+    }
+
+    function updateDock() {
+        document.querySelectorAll('.dock-item[data-window]').forEach(item => {
+            const winId = 'window-' + item.dataset.window;
+            const win = document.getElementById(winId);
+            if (win && (win.classList.contains('open') || win.classList.contains('minimized-state'))) {
+                item.classList.add('has-window');
+            } else {
+                item.classList.remove('has-window');
+            }
+        });
+    }
+
+    // Window control buttons
+    allWindows.forEach(win => {
+        win.querySelectorAll('.win-btn').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                const action = btn.dataset.action;
+                if (action === 'close') closeWindow(win);
+                else if (action === 'minimize') minimizeWindow(win);
+                else if (action === 'maximize') maximizeWindow(win);
+            });
+        });
+
+        // Click to bring to front
+        win.addEventListener('mousedown', () => bringToFront(win));
+    });
+
+    // Make windows draggable
+    allWindows.forEach(win => {
+        const titlebar = win.querySelector('.window-titlebar');
+        let dragging = false, startX, startY, startLeft, startTop;
+
+        titlebar.addEventListener('mousedown', (e) => {
+            if (e.target.closest('.win-btn')) return;
+            dragging = true;
+            startX = e.clientX;
+            startY = e.clientY;
+            startLeft = win.offsetLeft;
+            startTop = win.offsetTop;
+            bringToFront(win);
+            e.preventDefault();
+        });
+
+        document.addEventListener('mousemove', (e) => {
+            if (!dragging) return;
+            const dx = e.clientX - startX;
+            const dy = e.clientY - startY;
+            win.style.left = (startLeft + dx) + 'px';
+            win.style.top = (startTop + dy) + 'px';
+        });
+
+        document.addEventListener('mouseup', () => {
+            dragging = false;
+        });
+    });
+
+    // Desktop icons — double click to open
+    document.querySelectorAll('.desktop-icon').forEach(icon => {
+        icon.addEventListener('dblclick', () => {
+            const winId = icon.dataset.window;
+            if (winId) {
+                openWindow(winId);
+            } else if (icon.id === 'icon-catshade') {
+                window.open('https://catshade.ru', '_blank');
+            } else if (icon.id === 'icon-minecraft') {
+                window.open('https://launcher.bummy.ru', '_blank');
+            }
+        });
+    });
+
+    // Dock items
+    document.querySelectorAll('.dock-item[data-window]').forEach(item => {
+        item.addEventListener('click', () => {
+            const winId = item.dataset.window;
+            const win = document.getElementById('window-' + winId);
+            if (win && win.classList.contains('open')) {
+                // If already open and active, minimize
+                if (win.classList.contains('active')) {
+                    minimizeWindow(win);
+                } else {
+                    bringToFront(win);
+                }
+            } else {
+                openWindow(winId);
+            }
+        });
+    });
+
+    // =============================
+    // TERMINAL
+    // =============================
+    const termOutput = document.getElementById('term-output');
+    const termInput = document.getElementById('term-input');
+    const termPrompt = document.getElementById('term-prompt');
+
+    // Focus terminal on window click
+    document.getElementById('window-terminal').addEventListener('click', () => {
+        termInput.focus();
+    });
+
+    // File system
     const fileSystem = {
         '/': {
-            type: 'directory',
-            children: {
+            type: 'dir', children: {
                 'home': {
-                    type: 'directory',
-                    children: {
+                    type: 'dir', children: {
                         'user': {
-                            type: 'directory',
-                            children: {
-                                'portfolio.txt': {
-                                    type: 'file',
-                                    content: 'Welcome to bummylnx!\nType \'help\' for available commands.\n'
-                                },
+                            type: 'dir', children: {
+                                'about.txt': { type: 'file', content: 'Hello! I\'m bUmmy1337 — a developer and Linux enthusiast.\nThis portfolio is designed as a Linux desktop environment.\nFeel free to explore!' },
                                 'projects': {
-                                    type: 'directory',
-                                    children: {}
+                                    type: 'dir', children: {
+                                        'catshade.txt': { type: 'file', content: 'CatShade — https://catshade.ru\nA project by bUmmy1337.' },
+                                        'legacymirror.txt': { type: 'file', content: 'LegacyMirror — https://launcher.bummy.ru\nMinecraft related project.' }
+                                    }
                                 },
-                                'about.txt': {
-                                    type: 'file',
-                                    content: 'Hello! I\'m a software engineer with a passion for creating robust and scalable applications. I enjoy working with various technologies and constantly learning new things.\n\nThis portfolio is designed to mimic a desktop environment, showcasing my projects in a unique way.'
-                                }
+                                'documents': {
+                                    type: 'dir', children: {
+                                        'readme.md': { type: 'file', content: '# bummylnx\nA portfolio Linux distribution.\nType `help` in the terminal for commands.' }
+                                    }
+                                },
+                                '.bashrc': { type: 'file', content: '# ~/.bashrc\nexport PS1="\\u@\\h:\\w$ "\nalias ll="ls -la"\nalias vim="nvim"' }
                             }
                         }
                     }
                 },
+                'etc': {
+                    type: 'dir', children: {
+                        'bummylnx-release': { type: 'file', content: 'NAME="bummylnx"\nVERSION="2026.03 (Rolling)"\nID=bummylnx\nID_LIKE=arch\nHOME_URL="https://bummy1337.github.io"\nBUG_REPORT_URL="https://github.com/bummy1337"' },
+                        'hostname': { type: 'file', content: 'bummylnx' }
+                    }
+                },
                 'bin': {
-                    type: 'directory',
-                    children: {
-                        'ls': { type: 'executable' },
-                        'cd': { type: 'executable' },
-                        'cat': { type: 'executable' },
-                        'echo': { type: 'executable' },
-                        'clear': { type: 'executable' },
-                        'help': { type: 'executable' },
-                        'whoami': { type: 'executable' },
-                        'pwd': { type: 'executable' },
-                        'github': { type: 'executable' },
-                        'about': { type: 'executable' },
-                        'neofetch': { type: 'executable' } // Added neofetch
+                    type: 'dir', children: {
+                        'ls': { type: 'exec' }, 'cd': { type: 'exec' }, 'cat': { type: 'exec' },
+                        'echo': { type: 'exec' }, 'clear': { type: 'exec' }, 'help': { type: 'exec' },
+                        'whoami': { type: 'exec' }, 'pwd': { type: 'exec' }, 'neofetch': { type: 'exec' },
+                        'github': { type: 'exec' }, 'about': { type: 'exec' }, 'uname': { type: 'exec' }
                     }
                 }
             }
         }
     };
 
-    // Matrix effect canvas
-    const canvas = document.getElementById('matrix-canvas');
-    const ctx = canvas.getContext('2d');
-
-    canvas.width = window.innerWidth;
-    canvas.height = window.innerHeight;
-
-    const katakana = 'アァカサタナハマヤャラワガザダバパイィキシチニヒミリヰギジヂビピウゥクスツヌフムユュルグズヅブプエェケセテネヘメレヱゲゼデベペオォコソトノホモヨョロヲゴゾドボポヴッン';
-    const latin = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
-    const nums = '0123456789';
-    const alphabet = katakana + latin + nums;
-
-    const fontSize = 16;
-    const columns = canvas.width / fontSize;
-
-    const drops = [];
-    for (let i = 0; i < columns; i++) {
-        drops[i] = 1;
-    }
-
-    function drawMatrix() {
-        ctx.fillStyle = 'rgba(0, 0, 0, 0.05)';
-        ctx.fillRect(0, 0, canvas.width, canvas.height);
-
-        ctx.fillStyle = '#0F0'; // Green text
-        ctx.font = `${fontSize}px monospace`;
-
-        for (let i = 0; i < drops.length; i++) {
-            const text = alphabet.charAt(Math.floor(Math.random() * alphabet.length));
-            ctx.fillText(text, i * fontSize, drops[i] * fontSize);
-
-            if (drops[i] * fontSize > canvas.height && Math.random() > 0.975) {
-                drops[i] = 0;
-            }
-            drops[i]++;
-        }
-    }
-    setInterval(drawMatrix, 30);
-
-    window.addEventListener('resize', () => {
-        canvas.width = window.innerWidth;
-        canvas.height = window.innerHeight;
-        const newColumns = canvas.width / fontSize;
-        drops.length = newColumns; // Adjust drops array size
-        for (let i = 0; i < newColumns; i++) {
-            if (drops[i] === undefined) drops[i] = 1;
-        }
-    });
-
-
-    // Update system time
-    function updateSystemTime() {
-        const now = new Date();
-        const options = { hour: '2-digit', minute: '2-digit', hour12: false };
-        systemTimeSpan.textContent = now.toLocaleTimeString('en-US', options);
-    }
-    setInterval(updateSystemTime, 1000);
-    updateSystemTime(); // Initial call
-
-    // Simulate system monitoring data (for demonstration purposes)
-    function updateSystemWidgets() {
-        // CPU Usage
-        let cpuData = `CPU: Ryzen 7 2700   3.2 GHz\n`;
-        for (let i = 0; i < 8; i++) { // Simulate 8 cores
-            const percent = Math.floor(Math.random() * 100);
-            const temp = Math.floor(Math.random() * (80 - 40) + 40); // 40-80°C
-            const bar = '█'.repeat(Math.floor(percent / 10)).padEnd(10, '░');
-            cpuData += `C${i}: ${percent.toString().padStart(3)}% [${bar}] ${temp}°C\n`;
-        }
-        cpuOutput.textContent = cpuData;
-
-        // Memory Usage
-        const totalMem = 32; // GB
-        const usedMem = (Math.random() * totalMem * 0.7).toFixed(1); // Up to 70% used
-        const freeMem = (totalMem - usedMem).toFixed(1);
-        const memPercent = ((usedMem / totalMem) * 100).toFixed(0);
-        const memBar = '█'.repeat(Math.floor(memPercent / 10)).padEnd(10, '░');
-
-        memOutput.textContent = `MEM: Total: ${totalMem}GB\nUsed: ${usedMem}GB (${memPercent}%)\nFree: ${freeMem}GB\n[${memBar}]`;
-
-        // Network Activity
-        const downloadSpeed = (Math.random() * 1000).toFixed(0); // KB/s
-        const uploadSpeed = (Math.random() * 500).toFixed(0); // KB/s
-        const totalDown = (Math.random() * 10000).toFixed(0); // MB
-        const totalUp = (Math.random() * 5000).toFixed(0); // MB
-
-        netOutput.textContent = `NET: eth0\nDownload: ${downloadSpeed} KB/s (Total: ${totalDown} MB)\nUpload: ${uploadSpeed} KB/s (Total: ${totalUp} MB)`;
-    }
-    setInterval(updateSystemWidgets, 2000); // Update every 2 seconds
-    updateSystemWidgets(); // Initial call
-
-    // Terminal functions
-    function writeOutput(text) {
-        terminalOutput.innerHTML += ansiToHtml(text);
-        terminalOutput.scrollTop = terminalOutput.scrollHeight;
-    }
-
-    function writePrompt() {
-        currentPromptSpan.innerHTML = `${username}@${hostname}:<span class="path">${currentPath}</span>$ `;
-        terminalInput.focus();
-    }
-
-    // Function to convert ANSI escape codes to HTML
-    function ansiToHtml(text) {
-        const ansiColors = {
-            '30': 'black', '31': 'red', '32': 'green', '33': 'yellow',
-            '34': 'blue', '35': 'magenta', '36': 'cyan', '37': 'white',
-            '90': 'bright-black', '91': 'bright-red', '92': 'bright-green', '93': 'bright-yellow',
-            '94': 'bright-blue', '95': 'bright-magenta', '96': 'bright-cyan', '97': 'bright-white'
-        };
-        const ansiStyles = {
-            '1': 'bold', '4': 'underline'
-        };
-
-        let html = '';
-        let openTags = [];
-
-        // Regex to find ANSI escape codes
-        const regex = /\x1b\[([0-9;]*)m/g;
-        let lastIndex = 0;
-        let match;
-
-        while ((match = regex.exec(text)) !== null) {
-            // Add text before the escape code
-            if (match.index > lastIndex) {
-                html += text.substring(lastIndex, match.index);
-            }
-
-            const codes = match[1].split(';');
-            codes.forEach(code => {
-                if (code === '0' || code === '') { // Reset
-                    while (openTags.length > 0) {
-                        html += `</span>`;
-                        openTags.pop();
-                    }
-                } else if (ansiColors[code]) {
-                    html += `<span class="ansi-${ansiColors[code]}">`;
-                    openTags.push('span');
-                } else if (ansiStyles[code]) {
-                    html += `<span class="ansi-${ansiStyles[code]}">`;
-                    openTags.push('span');
-                }
-            });
-            lastIndex = regex.lastIndex;
-        }
-
-        // Add any remaining text
-        if (lastIndex < text.length) {
-            html += text.substring(lastIndex);
-        }
-
-        // Close any remaining open tags
-        while (openTags.length > 0) {
-            html += `</span>`;
-            openTags.pop();
-        }
-
-        return html;
-    }
-
-    function getDirectory(path) {
-        let parts = path.split('/').filter(p => p !== '');
-        let current = fileSystem;
-        for (let i = 0; i < parts.length; i++) {
-            if (current.children && current.children[parts[i]]) {
-                current = current.children[parts[i]];
+    function getNode(path) {
+        const parts = path.split('/').filter(Boolean);
+        let node = fileSystem['/'];
+        for (const p of parts) {
+            if (node.children && node.children[p]) {
+                node = node.children[p];
             } else {
-                return null; // Path not found
+                return null;
             }
         }
-        return current;
+        return node;
     }
 
-    function resolvePath(path) {
-        let resolved;
-        if (path.startsWith('/')) {
-            resolved = path;
-        } else {
-            resolved = currentPath + (currentPath.endsWith('/') ? '' : '/') + path;
+    function resolvePath(p) {
+        let resolved = p.startsWith('/') ? p : currentPath + (currentPath.endsWith('/') ? '' : '/') + p;
+        const parts = resolved.split('/').filter(Boolean);
+        const stack = [];
+        for (const part of parts) {
+            if (part === '..') { stack.pop(); }
+            else if (part !== '.') { stack.push(part); }
         }
-
-        // Handle '..' and '.'
-        let parts = resolved.split('/').filter(p => p !== '');
-        let newParts = [];
-        for (let i = 0; i < parts.length; i++) {
-            if (parts[i] === '..') {
-                if (newParts.length > 0) {
-                    newParts.pop();
-                }
-            } else if (parts[i] !== '.') {
-                newParts.push(parts[i]);
-            }
-        }
-        return '/' + newParts.join('/');
+        return '/' + stack.join('/');
     }
 
-    async function executeCommand(commandLine) {
-        writeOutput(`<span class="prompt">${username}@${hostname}:<span class="path">${currentPath}</span>$ </span>${commandLine}\n`);
+    function writeTerminal(html) {
+        termOutput.innerHTML += html;
+        termOutput.scrollTop = termOutput.scrollHeight;
+    }
 
-        if (commandLine.trim() === '') {
-            writePrompt();
-            return;
-        }
+    function updatePrompt() {
+        const displayPath = currentPath === '/home/user' ? '~' : currentPath.replace('/home/user', '~');
+        termPrompt.innerHTML = `${username}@${hostname}:<span class="term-path">${displayPath}</span>$ `;
+        termInput.focus();
+    }
 
-        commandHistory.push(commandLine);
+    async function execCommand(line) {
+        const displayPath = currentPath === '/home/user' ? '~' : currentPath.replace('/home/user', '~');
+        writeTerminal(`<span class="term-prompt">${username}@${hostname}:<span class="term-path">${displayPath}</span>$ </span>${escapeHtml(line)}\n`);
+
+        if (!line.trim()) { updatePrompt(); return; }
+
+        commandHistory.push(line);
         historyIndex = commandHistory.length;
 
-        const parts = commandLine.split(' ').filter(p => p !== '');
-        const command = parts[0];
+        const parts = line.trim().split(/\s+/);
+        const cmd = parts[0];
         const args = parts.slice(1);
 
-        switch (command) {
+        switch (cmd) {
             case 'help':
-                writeOutput(`Available commands:\n`);
-                writeOutput(`  help - display this help message\n`);
-                writeOutput(`  clear - clear the terminal screen\n`);
-                writeOutput(`  ls - list directory contents\n`);
-                writeOutput(`  cd [directory] - change the current directory\n`);
-                writeOutput(`  cat [file] - display file contents\n`);
-                writeOutput(`  echo [text] - display a line of text\n`);
-                writeOutput(`  whoami - print effective userid\n`);
-                writeOutput(`  pwd - print name of current working directory\n`);
-                writeOutput(`  github [username] - fetch and display GitHub repositories\n`);
-                writeOutput(`  about - display information about me\n`);
-                writeOutput(`  neofetch - display system information\n`);
+                writeTerminal(`<span class="ansi-bold">Available commands:</span>
+  <span class="ansi-cyan">help</span>      — show this help
+  <span class="ansi-cyan">clear</span>     — clear terminal
+  <span class="ansi-cyan">ls</span>        — list directory
+  <span class="ansi-cyan">cd</span>        — change directory
+  <span class="ansi-cyan">cat</span>       — show file contents
+  <span class="ansi-cyan">echo</span>      — print text
+  <span class="ansi-cyan">pwd</span>       — current directory
+  <span class="ansi-cyan">whoami</span>    — current user
+  <span class="ansi-cyan">uname</span>     — system info
+  <span class="ansi-cyan">neofetch</span>  — system overview
+  <span class="ansi-cyan">github</span>    — open GitHub repos
+  <span class="ansi-cyan">about</span>     — about me
+`);
                 break;
-            case 'neofetch':
-                displayNeofetch();
-                break;
+
             case 'clear':
-                terminalOutput.innerHTML = '';
+                termOutput.innerHTML = '';
                 break;
-            case 'ls':
-                const targetPath = args[0] ? resolvePath(args[0]) : currentPath;
-                const dir = getDirectory(targetPath);
-                if (dir && dir.type === 'directory') {
-                    for (const item in dir.children) {
-                        const child = dir.children[item];
-                        const color = child.type === 'directory' ? 'lightblue' : (child.type === 'executable' ? 'lightgreen' : 'white');
-                        writeOutput(`<span style="color: ${color}">${item}</span>  `);
+
+            case 'ls': {
+                const target = args[0] ? resolvePath(args[0]) : currentPath;
+                const node = getNode(target);
+                if (node && node.type === 'dir') {
+                    let out = '';
+                    for (const name of Object.keys(node.children)) {
+                        const child = node.children[name];
+                        if (child.type === 'dir') out += `<span class="ansi-blue">${name}/</span>  `;
+                        else if (child.type === 'exec') out += `<span class="ansi-green">${name}</span>  `;
+                        else out += `${name}  `;
                     }
-                    writeOutput('\n');
-                } else if (dir && dir.type === 'file') {
-                    writeOutput(`${args[0]}\n`);
+                    writeTerminal(out + '\n');
                 } else {
-                    writeOutput(`ls: cannot access '${args[0] || '.'}': No such file or directory\n`);
+                    writeTerminal(`<span class="ansi-red">ls: cannot access '${escapeHtml(args[0] || '.')}': No such file or directory</span>\n`);
                 }
                 break;
+            }
+
             case 'cd':
-                if (args.length === 0 || args[0] === '~') {
+                if (!args[0] || args[0] === '~') {
                     currentPath = '/home/user';
                 } else {
-                    const newPath = resolvePath(args[0]);
-                    const targetDir = getDirectory(newPath);
-                    if (targetDir && targetDir.type === 'directory') {
-                        currentPath = newPath;
+                    const np = resolvePath(args[0]);
+                    const node = getNode(np);
+                    if (node && node.type === 'dir') {
+                        currentPath = np;
                     } else {
-                        writeOutput(`cd: no such file or directory: ${args[0]}\n`);
+                        writeTerminal(`<span class="ansi-red">cd: no such directory: ${escapeHtml(args[0])}</span>\n`);
                     }
                 }
                 break;
+
             case 'cat':
-                if (args.length === 0) {
-                    writeOutput('cat: missing operand\n');
+                if (!args[0]) {
+                    writeTerminal(`<span class="ansi-red">cat: missing operand</span>\n`);
                 } else {
-                    const filePath = resolvePath(args[0]);
-                    const file = getDirectory(filePath);
-                    if (file && file.type === 'file') {
-                        writeOutput(file.content + '\n');
-                    } else if (file && file.type === 'directory') {
-                        writeOutput(`cat: ${args[0]}: Is a directory\n`);
+                    const fp = resolvePath(args[0]);
+                    const node = getNode(fp);
+                    if (node && node.type === 'file') {
+                        writeTerminal(escapeHtml(node.content) + '\n');
+                    } else if (node && node.type === 'dir') {
+                        writeTerminal(`<span class="ansi-red">cat: ${escapeHtml(args[0])}: Is a directory</span>\n`);
                     } else {
-                        writeOutput(`cat: ${args[0]}: No such file or directory\n`);
+                        writeTerminal(`<span class="ansi-red">cat: ${escapeHtml(args[0])}: No such file or directory</span>\n`);
                     }
                 }
                 break;
+
             case 'echo':
-                writeOutput(args.join(' ') + '\n');
+                writeTerminal(escapeHtml(args.join(' ')) + '\n');
                 break;
-            case 'whoami':
-                writeOutput(`${username}\n`);
-                break;
+
             case 'pwd':
-                writeOutput(`${currentPath}\n`);
+                writeTerminal(currentPath + '\n');
                 break;
-            case 'github':
-                const githubUsername = args[0] || 'bummy1337'; // Default username
-                await fetchGitHubRepos(githubUsername);
-                openWindow(portfolioWindow, `GitHub Repositories for ${githubUsername}`);
+
+            case 'whoami':
+                writeTerminal(username + '\n');
                 break;
-            case 'about':
-                displayAboutMe();
-                openWindow(portfolioWindow, 'About Me');
-                break;
-            default:
-                writeOutput(`Command not found: ${commandLine}\n`);
-                break;
-        }
-        writePrompt();
-    }
 
-    // Function to display neofetch output
-    function displayNeofetch() {
-        const os = 'bummylnx';
-        const kernel = '6.6.6-zen';
-        const uptime = '2h 30m'; // Simplified uptime
-        const packages = '1337 (pacman)';
-        const shell = 'bash';
-        const resolution = `${window.innerWidth}x${window.innerHeight}`;
-        const desktopEnv = 'hyprland'; // Example DE
-        const wm = 'Xfwm4'; // Example WM
-        const theme = 'Adwaita-dark [GTK2/3]';
-        const icons = 'Adwaita [GTK2/3]';
-        const terminal = 'Terminal.js';
-        const cpu = 'AMD Ryzen 7 2700 (16) @ 3.200GHz';
-        const gpu = 'NVIDIA GeForce RTX 3060';
-        const memory = '16GB';
-
-        const neofetchOutput = `\x1b[32m
-⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⢀⠠⠀⠠⠀⠄⠠⠠⠀⠤⠀⢄⡀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀
-⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⡠⠐⠊⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠈⠑⠀⢄⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀
-⠀⠀⠀⠀⠀⠀⠀⠀⠀⢀⣀⠀⠀⢀⠔⠁⠀⠀⠀⢀⠤⠀⠀⠀⠀⠀⠀⠠⢀⠀⠀⠀⠀⡈⠢⡀⠀⢀⡀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀
-⠀⠀⠀⠀⠀⠀⠀⢀⠔⠁⠤⠑⡖⠁⠀⠀⠀⠀⠔⠀⠀⠀⠀⢀⠀⠀⠀⠀⠀⠑⢄⠀⠀⠈⠠⡘⢖⠁⠈⠐⡄⠀⠀⠀⠀⠀⠀⠀⠀
-⠀⠀⠀⠀⠀⠀⢠⠂⡐⠀⠀⡊⠀⠀⠀⠀⠀⡡⠒⠀⠀⠀⢀⠆⢣⠀⠀⠀⠀⠀⢄⠡⡀⠀⠀⠈⢌⢆⠂⠄⠈⢢⠀⠀⠀⠀⠀⠀⠀
-⠀⠀⠀⠀⠀⠀⠆⠐⠀⠀⡜⢀⠀⠀⠀⠀⡔⠀⠀⠀⠀⡠⠃⠀⠀⠣⡀⠀⠀⠀⠀⠐⢵⡀⠀⠀⠈⡌⡂⠈⠆⠀⢢⠀⠀⠀⠀⠀⠀
-⠀⠀⠀⠀⠀⡘⠀⠉⠀⢀⡇⠌⠀⠀⠀⡔⠀⠀⠀⣀⠖⠀⠀⠀⠀⠀⠈⠦⣀⠀⠀⠀⠀⠇⠀⠀⠀⠘⢧⠀⠸⠀⠀⢇⠀⠀⠀⠀⠀
-⠀⠀⠀⠀⠀⡁⠀⠀⠀⢸⢢⠁⠀⠀⠐⠀⠀⡠⠚⠀⠉⠂⠀⠀⠀⠀⠀⠘⠀⠸⢅⠀⠀⠸⠀⠀⠀⠀⣿⡀⠀⡇⠀⠈⠄⠀⠀⠀⠀
-⢰⠠⣤⠄⠸⠀⠀⠀⣀⡜⡌⠀⠀⠀⢸⠉⣅⣤⣀⣒⠄⠀⠀⠀⠀⠀⠀⠠⢐⣠⣤⣤⣱⠒⡇⠀⠀⠀⢸⡡⠀⠃⠤⠤⢤⡄⠖⢒⠆
-⠀⠱⢄⠈⢅⠒⢐⠠⢄⠈⡇⠀⠀⠐⢻⠟⢋⠟⢋⠙⣗⡄⠀⠀⠀⠀⠀⢐⡟⢉⠙⢮⠙⢷⡟⠀⠀⠀⢸⢀⠄⠂⢠⠍⠀⢀⠄⠊⠀
-⠀⠀⢀⠕⠠⡀⠈⠂⠣⠀⠆⠀⠀⠀⠸⠂⢸⣀⠻⢇⢸⠀⠀⠀⠀⠀⠀⠸⣀⠿⢄⢸⠀⢁⠃⠀⠀⠠⢸⢨⠀⠀⠀⡠⠔⢡⠀⠀⠀
-⠀⢀⠌⠀⠀⠑⠠⡀⠀⠂⡆⡆⠀⠀⡀⡆⠈⢫⢀⠸⠊⠀⠀⠀⠀⠀⠀⠀⠫⢄⠨⠊⠀⡘⠀⠀⠀⢰⢸⠈⢀⡠⠐⠁⠀⠈⡆⠀⠀
-⢀⠎⢀⠎⠀⠀⡘⠘⠈⠐⢣⢰⡀⠀⠸⣜⡄⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⣰⢥⠆⠀⡠⢨⠎⠉⢡⠐⠀⠀⠀⠀⢰⠀⠀
-⡎⠰⢉⠀⠀⠀⣣⠂⠀⠀⠀⠻⠔⠄⡀⢯⡘⠂⠀⠀⠀⠀⠀⠰⣓⡄⠀⠀⠀⠀⠨⡰⢀⡞⠠⠊⠻⠊⠀⠀⠈⠰⠀⠀⠀⠆⢰⠀⠀
-⡇⡆⢈⠀⡇⠀⠃⠀⠀⠀⠀⠀⠀⠀⠈⠉⠑⠢⢀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⢀⡠⠘⠁⠀⠀⠀⠀⠀⠀⠀⢰⣸⠀⠀⡘⢀⡌⠀⠀
-⠈⠣⠨⡐⠘⠆⡘⢄⡀⠀⠀⠀⠀⠀⢨⠑⡀⠀⠀⢀⣸⢲⡆⠠⠀⠤⢒⣾⣻⣄⠎⡇⢀⠞⠠⠀⠀⠀⠀⠀⢋⠆⢀⠔⠡⠋⠀⠀⠀
-⠀⠀⠀⠈⠁⠀⠈⠁⠀⠀⠀⠐⢏⠢⡠⢆⠱⡔⠒⠉⢾⢱⢫⢉⠉⠉⠛⠘⠁⣷⠀⢎⡍⢀⢦⠔⢋⠄⠀⠀⠉⠀⠁⠀⠀⠀⠀⠀⠀
-⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⡠⢄⡊⠢⡀⠙⠂⠐⣄⠀⠋⣾⢨⠿⠿⠀⢀⡠⡸⢞⠀⠈⠀⠚⢁⠄⠋⢤⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀
-⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⢉⠢⢀⡈⠁⡠⠐⡐⠈⠐⠁⡩⠏⡚⠛⠙⣂⣏⠓⠚⠐⠄⠐⢀⠀⣀⡠⢝⡗⢄⠀⠀⠀⠀⠀⠀⠀⠀⠀
-⠀⠀⠀⠀⠀⠀⠀⠀⢠⠖⠋⠮⡥⣴⡀⠀⠐⠁⠀⡠⠃⠀⠀⠀⠀⠊⠀⠀⡁⠢⠀⠀⠁⠀⢀⡺⢩⡞⡂⢄⠓⢄⠀⠀⠀⠀⠀⠀⠀
-⠀⠀⠀⠀⠀⠀⠀⠀⡴⠖⡡⡎⣸⠈⡌⠀⠀⡴⢊⠀⠀⠀⠀⠀⠀⠀⢀⠚⠀⠀⠀⠱⢣⠈⢡⠃⡈⡃⡄⠀⠐⠈⢄⠀⠀⠀⠀⠀⠀
-⠀⠀⠀⠀⠀⠀⠀⠰⠁⢀⠃⢇⢉⠆⠱⡀⡴⠁⡘⠀⠀⠀⠀⠀⠀⢀⠊⠀⠀⠀⠀⣆⡈⡢⠊⢠⡡⡱⠁⠀⠀⠀⢸⠀⠀⠀⠀⠀⠀
-⠀⠀⠀⠀⠀⠀⠀⢰⠀⠈⠀⠈⢦⠉⡢⡈⠑⡺⠃⠀⠀⠀⠀⢀⠔⠁⠀⠀⠀⠀⠀⠈⠣⣅⠔⢔⠔⠁⠀⠀⠀⠀⠜⠀⠀⠀⠀⠀⠀
-⠀⠀⠀⠀⠀⠀⠀⠀⠱⡀⠀⠀⠀⠉⢢⣼⠏⠀⠀⠀⠀⠀⡠⠈⠀⠀⠀⠀⠀⠀⠀⠀⠀⢸⠈⢗⠤⠀⣀⡀⡠⠊⠀⠀⠀⠀⠀⠀⠀
-⠀⠀⠀⠀⠀⠀⠀⠀⠀⠈⠂⠤⠄⠊⠒⠁⠧⠀⠀⠀⠀⠘⠁⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠺⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀
-\x1b[0m
-        \x1b[36m${username}\x1b[0m@\x1b[32m${hostname}\x1b[0m
-        ------------------
-        \x1b[33mOS\x1b[0m: ${os}
-        \x1b[33mKernel\x1b[0m: ${kernel}
-        \x1b[33mUptime\x1b[0m: ${uptime}
-        \x1b[33mPackages\x1b[0m: ${packages}
-        \x1b[33mShell\x1b[0m: ${shell}
-        \x1b[33mResolution\x1b[0m: ${resolution}
-        \x1b[33mDE\x1b[0m: ${desktopEnv}
-        \x1b[33mWM\x1b[0m: ${wm}
-        \x1b[33mTheme\x1b[0m: ${theme}
-        \x1b[33mIcons\x1b[0m: ${icons}
-        \x1b[33mTerminal\x1b[0m: ${terminal}
-        \x1b[33mCPU\x1b[0m: ${cpu}
-        \x1b[33mGPU\x1b[0m: ${gpu}
-        \x1b[33mMemory\x1b[0m: ${memory}
-        `;
-        writeOutput(`<pre>${neofetchOutput}</pre>\n`);
-    }
-
-    // Function to fetch GitHub repositories
-    async function fetchGitHubRepos(ghUsername) {
-        githubReposDiv.innerHTML = 'Fetching repositories...';
-        try {
-            const response = await fetch(`https://api.github.com/users/${ghUsername}/repos`);
-            if (!response.ok) {
-                throw new Error(`GitHub API error: ${response.statusText}`);
-            }
-            const repos = await response.json();
-            displayRepos(repos);
-        } catch (error) {
-            githubReposDiv.innerHTML = `<p style="color: red;">Error fetching repositories: ${error.message}. Please check the username or try again later.</p>`;
-            console.error('Error fetching GitHub repositories:', error);
-        }
-    }
-
-    // Function to display repositories
-    function displayRepos(repos) {
-        if (repos.length === 0) {
-            githubReposDiv.innerHTML = '<p>No public repositories found for this user.</p>';
-            return;
-        }
-
-        githubReposDiv.innerHTML = '<h2>My GitHub Repositories</h2>';
-        repos.forEach(repo => {
-            const repoCard = document.createElement('div');
-            repoCard.classList.add('repo-card');
-            repoCard.innerHTML = `
-                <h3><a href="${repo.html_url}" target="_blank">${repo.name}</a></h3>
-                <p>${repo.description || 'No description provided.'}</p>
-                <p>Language: ${repo.language || 'N/A'}</p>
-                <p>Stars: ${repo.stargazers_count}</p>
-            `;
-            repoCard.addEventListener('click', () => openRepoDetail(repo)); // Add click listener
-            githubReposDiv.appendChild(repoCard);
-        });
-    }
-
-    // Function to open repository detail window
-    async function openRepoDetail(repo) {
-        currentRepo = repo;
-        openWindow(repoDetailWindow, repo.name);
-        repoDetailTitle.textContent = repo.name;
-        // Default to showing files
-        switchRepoDetailSection('files');
-    }
-
-    // Function to switch between repo detail sections (Files, README, Releases)
-    async function switchRepoDetailSection(section) {
-        repoDetailNavItems.forEach(item => item.classList.remove('active'));
-        document.querySelector(`.repo-detail-nav-item[data-section="${section}"]`).classList.add('active');
-
-        repoDetailContent.innerHTML = 'Loading...';
-
-        switch (section) {
-            case 'files':
-                await renderRepoFiles(currentRepo);
-                break;
-            case 'readme':
-                await renderReadme(currentRepo);
-                break;
-            case 'releases':
-                await renderReleases(currentRepo);
-                break;
-        }
-    }
-
-    // Function to render repository files and directories
-    async function renderRepoFiles(repo, path = '') {
-        repoDetailContent.innerHTML = `<h3>Files & Directories for ${repo.name}${path}</h3>`;
-        repoDetailContent.innerHTML += `<div class="clone-command">
-                                            <span>git clone ${repo.clone_url}</span>
-                                            <button class="copy-clone-btn" data-clone-url="${repo.clone_url}">Copy</button>
-                                        </div>`;
-        try {
-            const response = await fetch(`https://api.github.com/repos/${repo.owner.login}/${repo.name}/contents${path}`);
-            if (!response.ok) {
-                throw new Error(`GitHub API error: ${response.statusText}`);
-            }
-            const contents = await response.json();
-
-            if (path !== '') {
-                repoDetailContent.innerHTML += `<div class="dir-item" data-path="${path.substring(0, path.lastIndexOf('/')) || ''}"><i class="fas fa-folder"></i> ..</div>`;
-            }
-
-            contents.forEach(item => {
-                if (item.type === 'dir') {
-                    repoDetailContent.innerHTML += `<div class="dir-item" data-path="${path}/${item.name}"><i class="fas fa-folder"></i> ${item.name}</div>`;
+            case 'uname':
+                if (args.includes('-a')) {
+                    writeTerminal('Linux bummylnx 6.6.6-zen #1 ZEN SMP PREEMPT_DYNAMIC x86_64 GNU/Linux\n');
                 } else {
-                    repoDetailContent.innerHTML += `<div class="file-item" data-url="${item.download_url}"><i class="fas fa-file"></i> ${item.name}</div>`;
+                    writeTerminal('Linux\n');
                 }
-            });
+                break;
 
-            // Add event listeners for directory navigation
-            repoDetailContent.querySelectorAll('.dir-item').forEach(dirItem => {
-                dirItem.addEventListener('click', () => {
-                    renderRepoFiles(repo, dirItem.dataset.path);
-                });
-            });
+            case 'neofetch':
+                writeTerminal(`<span class="ansi-cyan">
+      /\\
+     /  \\
+    /    \\
+   /      \\
+  /   ,,   \\
+ /   |  |   \\
+/_-''    ''-_\\
+</span>  <span class="ansi-blue">${username}</span>@<span class="ansi-green">${hostname}</span>
+  ──────────────
+  <span class="ansi-yellow">OS</span>:       bummylnx rolling
+  <span class="ansi-yellow">Kernel</span>:   6.6.6-zen
+  <span class="ansi-yellow">Uptime</span>:   since 2024
+  <span class="ansi-yellow">Packages</span>: 1337 (pacman)
+  <span class="ansi-yellow">Shell</span>:    zsh 5.9
+  <span class="ansi-yellow">DE</span>:       Hyprland
+  <span class="ansi-yellow">CPU</span>:      AMD Ryzen 5 9600X
+  <span class="ansi-yellow">GPU</span>:      NVIDIA RTX 3060
+  <span class="ansi-yellow">Memory</span>:   4.2G / 32G
 
-            // Add event listeners for file viewing
-            repoDetailContent.querySelectorAll('.file-item').forEach(fileItem => {
-                fileItem.addEventListener('click', async () => {
-                    const fileUrl = fileItem.dataset.url;
-                    const fileName = fileItem.textContent.trim();
-                    if (fileUrl) {
-                        repoDetailContent.innerHTML = `<h3>${fileName}</h3><p>Loading file content...</p>`;
-                        try {
-                            const response = await fetch(fileUrl);
-                            if (!response.ok) {
-                                throw new Error(`HTTP error! status: ${response.status}`);
-                            }
-                            const fileContent = await response.text();
+`);
+                break;
 
-                            // Limit display size for very large files to prevent crashes
-                            const MAX_DISPLAY_SIZE = 100 * 1024; // 100 KB
-                            if (fileContent.length > MAX_DISPLAY_SIZE) {
-                                repoDetailContent.innerHTML = `<h3>${fileName}</h3>
-                                    <p style="color: yellow;">File is too large to display directly (${(fileContent.length / 1024).toFixed(2)} KB). Please download it to view full content.</p>
-                                    <a href="${fileUrl}" target="_blank" class="download-link"><i class="fas fa-download"></i> Download ${fileName}</a>`;
-                            } else {
-                                repoDetailContent.innerHTML = `<h3>${fileName}</h3><pre>${escapeHtml(fileContent)}</pre>`;
-                            }
-                        } catch (error) {
-                            repoDetailContent.innerHTML = `<p style="color: red;">Error fetching file content: ${error.message}</p>`;
-                            console.error('Error fetching file content:', error);
-                        }
-                    }
-                });
-            });
+            case 'github':
+                openWindow('github');
+                if (allRepos.length === 0) fetchGitHubRepos();
+                writeTerminal('<span class="ansi-green">Opening GitHub repositories...</span>\n');
+                break;
 
-            // Add event listener for copy clone button
-            repoDetailContent.querySelector('.copy-clone-btn').addEventListener('click', (e) => {
-                copyToClipboard(e.target.dataset.cloneUrl);
-                e.target.textContent = 'Copied!';
-                setTimeout(() => e.target.textContent = 'Copy', 2000);
-            });
+            case 'about':
+                openWindow('about');
+                writeTerminal('<span class="ansi-green">Opening About Me...</span>\n');
+                break;
 
-        } catch (error) {
-            repoDetailContent.innerHTML = `<p style="color: red;">Error fetching repository contents: ${error.message}</p>`;
-            console.error('Error fetching repo contents:', error);
+            default:
+                writeTerminal(`<span class="ansi-red">${escapeHtml(cmd)}: command not found</span>\n`);
+                break;
         }
+
+        updatePrompt();
     }
 
-    // Function to render README content
-    async function renderReadme(repo) {
-        repoDetailContent.innerHTML = `<h3>README.md for ${repo.name}</h3>`;
-        try {
-            const response = await fetch(`https://api.github.com/repos/${repo.owner.login}/${repo.name}/readme`);
-            if (!response.ok) {
-                if (response.status === 404) {
-                    repoDetailContent.innerHTML += '<p>No README.md found for this repository.</p>';
-                    return;
-                }
-                throw new Error(`GitHub API error: ${response.statusText}`);
-            }
-            const readmeData = await response.json();
-            const base64Content = readmeData.content;
-            // Decode Base64 to a binary string, then convert to UTF-8
-            const readmeContent = decodeURIComponent(escape(atob(base64Content)));
-            // Use marked.js to convert Markdown to HTML
-            repoDetailContent.innerHTML += marked.parse(readmeContent);
-        } catch (error) {
-            repoDetailContent.innerHTML = `<p style="color: red;">Error fetching README: ${error.message}</p>`;
-            console.error('Error fetching README:', error);
-        }
-    }
-
-    // Function to render releases
-    async function renderReleases(repo) {
-        repoDetailContent.innerHTML = `<h3>Releases for ${repo.name}</h3>`;
-        try {
-            const response = await fetch(`https://api.github.com/repos/${repo.owner.login}/${repo.name}/releases`);
-            if (!response.ok) {
-                if (response.status === 404) {
-                    repoDetailContent.innerHTML += '<p>No releases found for this repository.</p>';
-                    return;
-                }
-                throw new Error(`GitHub API error: ${response.statusText}`);
-            }
-            const releases = await response.json();
-
-            if (releases.length === 0) {
-                repoDetailContent.innerHTML += '<p>No releases found for this repository.</p>';
-                return;
-            }
-
-            releases.forEach(release => {
-                repoDetailContent.innerHTML += `
-                    <div class="repo-release-card">
-                        <h4>${release.tag_name} - ${new Date(release.published_at).toLocaleDateString()}</h4>
-                        <p>${release.name || 'No title'}</p>
-                        <p>${release.body || 'No description'}</p>
-                        <ul>
-                            ${release.assets.map(asset => `
-                                <li><a href="${asset.browser_download_url}" target="_blank"><i class="fas fa-download"></i> ${asset.name} (${(asset.size / 1024 / 1024).toFixed(2)} MB)</a></li>
-                            `).join('')}
-                        </ul>
-                    </div>
-                `;
-            });
-        } catch (error) {
-            repoDetailContent.innerHTML = `<p style="color: red;">Error fetching releases: ${error.message}</p>`;
-            console.error('Error fetching releases:', error);
-        }
-    }
-
-    // Utility function to escape HTML for displaying raw file content
-    function escapeHtml(unsafe) {
-        const div = document.createElement('div');
-        div.textContent = unsafe;
-        return div.innerHTML;
-    }
-
-    // Utility function to copy text to clipboard
-    function copyToClipboard(text) {
-        const textarea = document.createElement('textarea');
-        textarea.value = text;
-        document.body.appendChild(textarea);
-        textarea.select();
-        document.execCommand('copy');
-        document.body.removeChild(textarea);
-    }
-
-    // Add event listeners for repo detail navigation
-    repoDetailNavItems.forEach(item => {
-        item.addEventListener('click', (e) => {
-            switchRepoDetailSection(e.target.dataset.section);
-        });
-    });
-
-    // Display About Me content
-    function displayAboutMe() {
-        githubReposDiv.innerHTML = `
-            <h2>About Me</h2>
-            <p>Hello! I'm a software engineer with a passion for creating robust and scalable applications. I enjoy working with various technologies and constantly learning new things.</p>
-            <p>This portfolio is designed to mimic a desktop environment, showcasing my projects in a unique way.</p>
-        `;
-    }
-
-    // Handle input from the terminal input field
-    terminalInput.addEventListener('keydown', async (e) => {
+    termInput.addEventListener('keydown', async (e) => {
         if (e.key === 'Enter') {
             e.preventDefault();
-            const commandLine = terminalInput.value.trim();
-            terminalInput.value = '';
-            await executeCommand(commandLine);
+            const line = termInput.value;
+            termInput.value = '';
+            await execCommand(line);
         } else if (e.key === 'ArrowUp') {
             e.preventDefault();
             if (historyIndex > 0) {
                 historyIndex--;
-                terminalInput.value = commandHistory[historyIndex];
+                termInput.value = commandHistory[historyIndex];
             }
         } else if (e.key === 'ArrowDown') {
             e.preventDefault();
             if (historyIndex < commandHistory.length - 1) {
                 historyIndex++;
-                terminalInput.value = commandHistory[historyIndex];
+                termInput.value = commandHistory[historyIndex];
             } else {
                 historyIndex = commandHistory.length;
-                terminalInput.value = '';
+                termInput.value = '';
             }
         }
     });
 
-    // Focus the terminal input when the terminal window is active
-    terminalWindow.addEventListener('click', () => {
-        terminalInput.focus();
-    });
-
-    // Also focus when the document is clicked, if terminal is open
-    document.addEventListener('click', () => {
-        if (terminalWindow.style.display === 'flex') {
-            terminalInput.focus();
-        }
-    });
-
-
-    // Window management functions
-    function openWindow(windowElement, title) {
-        windowElement.style.display = 'flex';
-        windowElement.querySelector('.window-title').textContent = title;
-        bringWindowToFront(windowElement);
-        // If opening terminal, focus its input
-        if (windowElement === terminalWindow) {
-            terminalInput.focus();
-        }
+    function escapeHtml(text) {
+        const div = document.createElement('div');
+        div.textContent = text;
+        return div.innerHTML;
     }
 
-    function closeWindow(windowElement) {
-        windowElement.style.display = 'none';
-        if (activeWindow === windowElement) {
-            activeWindow = null;
-        }
-    }
+    // =============================
+    // GITHUB REPOS
+    // =============================
+    const reposList = document.getElementById('github-repos-list');
+    const githubFilters = document.getElementById('github-filters');
+    const githubSearch = document.getElementById('github-search-input');
 
-    function minimizeWindow(windowElement) {
-        windowElement.style.display = 'none'; // For simplicity, just hide it
-    }
+    const langColors = {
+        'JavaScript': '#f1e05a', 'TypeScript': '#3178c6', 'Python': '#3572A5',
+        'HTML': '#e34c26', 'CSS': '#563d7c', 'C++': '#f34b7d', 'C#': '#178600',
+        'C': '#555555', 'Java': '#b07219', 'Go': '#00ADD8', 'Rust': '#dea584',
+        'Shell': '#89e051', 'Lua': '#000080', 'PHP': '#4F5D95', 'Kotlin': '#A97BFF',
+        'Vue': '#41b883', 'Dart': '#00B4AB', 'Ruby': '#701516',
+    };
 
-    function maximizeWindow(windowElement) {
-        // Toggle maximize state
-        if (windowElement.classList.contains('maximized')) {
-            windowElement.classList.remove('maximized');
-            windowElement.style.width = windowElement._originalWidth || '700px';
-            windowElement.style.height = windowElement._originalHeight || '500px';
-            windowElement.style.top = windowElement._originalTop || '100px';
-            windowElement.style.left = windowElement._originalLeft || '200px';
-        } else {
-            windowElement.classList.add('maximized');
-            windowElement._originalWidth = windowElement.style.width;
-            windowElement._originalHeight = windowElement.style.height;
-            windowElement._originalTop = windowElement.style.top;
-            windowElement._originalLeft = windowElement.style.left;
-
-            windowElement.style.width = '100vw';
-            windowElement.style.height = 'calc(100vh - 40px)'; /* Adjust for panel height */
-            windowElement.style.top = '40px';
-            windowElement.style.left = '0';
+    async function fetchGitHubRepos() {
+        reposList.innerHTML = '<div class="github-loading"><i class="fas fa-circle-notch fa-spin"></i> Loading repositories...</div>';
+        try {
+            const resp = await fetch('https://api.github.com/users/bummy1337/repos?sort=updated&per_page=100');
+            if (!resp.ok) throw new Error(resp.statusText);
+            allRepos = await resp.json();
+            buildFilters();
+            renderRepoList(allRepos);
+        } catch (err) {
+            reposList.innerHTML = `<div class="github-loading" style="color:var(--red);">
+                <i class="fas fa-exclamation-triangle"></i> Failed to load.
+                <a href="https://github.com/bummy1337" target="_blank" style="color:var(--accent);margin-left:8px;">Open GitHub</a>
+            </div>`;
         }
     }
 
-    function bringWindowToFront(windowElement) {
-        document.querySelectorAll('.window').forEach(win => {
-            win.classList.remove('active');
-            win.style.zIndex = 99;
+    function buildFilters() {
+        const langs = new Set();
+        allRepos.forEach(r => { if (r.language) langs.add(r.language); });
+        let html = '<button class="ghf-btn active" data-filter="all">All</button>';
+        langs.forEach(l => {
+            html += `<button class="ghf-btn" data-filter="${escapeHtml(l)}">${escapeHtml(l)}</button>`;
         });
-        windowElement.classList.add('active');
-        windowElement.style.zIndex = 101;
-        activeWindow = windowElement;
-    }
+        githubFilters.innerHTML = html;
 
-    // Make windows draggable
-    function makeDraggable(windowElement) {
-        let isDragging = false;
-        let offsetX, offsetY;
-
-        const header = windowElement.querySelector('.window-header');
-
-        header.addEventListener('mousedown', (e) => {
-            if (e.target.classList.contains('window-button')) return; // Don't drag if clicking buttons
-            isDragging = true;
-            offsetX = e.clientX - windowElement.getBoundingClientRect().left;
-            offsetY = e.clientY - windowElement.getBoundingClientRect().top;
-            windowElement.style.cursor = 'grabbing';
-            bringWindowToFront(windowElement);
-        });
-
-        document.addEventListener('mousemove', (e) => {
-            if (!isDragging) return;
-            windowElement.style.left = `${e.clientX - offsetX}px`;
-            windowElement.style.top = `${e.clientY - offsetY}px`;
-        });
-
-        document.addEventListener('mouseup', () => {
-            isDragging = false;
-            windowElement.style.cursor = 'grab';
+        githubFilters.querySelectorAll('.ghf-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+                githubFilters.querySelectorAll('.ghf-btn').forEach(b => b.classList.remove('active'));
+                btn.classList.add('active');
+                filterRepos();
+            });
         });
     }
 
-    makeDraggable(terminalWindow);
-    makeDraggable(portfolioWindow);
-    makeDraggable(repoDetailWindow); // Make the new repo detail window draggable
+    function filterRepos() {
+        const activeFilter = githubFilters.querySelector('.ghf-btn.active')?.dataset.filter || 'all';
+        const search = githubSearch.value.toLowerCase().trim();
+        let filtered = allRepos;
+        if (activeFilter !== 'all') {
+            filtered = filtered.filter(r => r.language === activeFilter);
+        }
+        if (search) {
+            filtered = filtered.filter(r =>
+                r.name.toLowerCase().includes(search) ||
+                (r.description || '').toLowerCase().includes(search)
+            );
+        }
+        renderRepoList(filtered);
+    }
 
-    // Attach event listeners for window buttons
-    document.querySelectorAll('.window-button.close').forEach(button => {
-        button.addEventListener('click', (e) => {
-            closeWindow(e.target.closest('.window'));
+    githubSearch.addEventListener('input', filterRepos);
+
+    function renderRepoList(repos) {
+        if (!repos.length) {
+            reposList.innerHTML = '<div class="github-loading">No repositories found.</div>';
+            return;
+        }
+
+        reposList.innerHTML = repos.map(r => {
+            const lang = r.language || '';
+            const color = langColors[lang] || '#8b949e';
+            return `<div class="repo-item" data-repo-id="${r.id}">
+                <div class="repo-item-header">
+                    <span class="repo-item-name"><i class="fas fa-cube"></i>${escapeHtml(r.name)}</span>
+                    <span class="repo-item-stars"><i class="fas fa-star"></i> ${r.stargazers_count}</span>
+                </div>
+                <div class="repo-item-desc">${escapeHtml(r.description || 'No description.')}</div>
+                <div class="repo-item-meta">
+                    ${lang ? `<span class="repo-lang"><span class="lang-dot" style="background:${color}"></span>${escapeHtml(lang)}</span>` : ''}
+                    <span class="repo-meta-item"><i class="fas fa-code-branch"></i> ${r.forks_count}</span>
+                    <span class="repo-meta-item"><i class="fas fa-eye"></i> ${r.watchers_count}</span>
+                </div>
+            </div>`;
+        }).join('');
+
+        // Click to open detail
+        reposList.querySelectorAll('.repo-item').forEach(el => {
+            el.addEventListener('click', () => {
+                const repoId = parseInt(el.dataset.repoId);
+                const repo = allRepos.find(r => r.id === repoId);
+                if (repo) openRepoDetail(repo);
+            });
+        });
+    }
+
+    // =============================
+    // REPO DETAIL
+    // =============================
+    async function openRepoDetail(repo) {
+        currentRepo = repo;
+        const detailTitle = document.getElementById('repo-detail-title');
+        detailTitle.innerHTML = `<i class="fab fa-github"></i> ${escapeHtml(repo.name)}`;
+        openWindow('repo-detail');
+        switchRepoTab('files');
+    }
+
+    // Tab switching
+    document.querySelectorAll('.repo-tab').forEach(tab => {
+        tab.addEventListener('click', () => {
+            document.querySelectorAll('.repo-tab').forEach(t => t.classList.remove('active'));
+            tab.classList.add('active');
+            switchRepoTab(tab.dataset.section);
         });
     });
 
-    document.querySelectorAll('.window-button.minimize').forEach(button => {
-        button.addEventListener('click', (e) => {
-            minimizeWindow(e.target.closest('.window'));
+    async function switchRepoTab(section) {
+        const content = document.getElementById('repo-detail-content');
+        if (!currentRepo) return;
+
+        content.innerHTML = '<div class="github-loading"><i class="fas fa-circle-notch fa-spin"></i> Loading...</div>';
+
+        switch (section) {
+            case 'files': await renderRepoFiles(currentRepo, ''); break;
+            case 'readme': await renderRepoReadme(currentRepo); break;
+            case 'releases': await renderRepoReleases(currentRepo); break;
+        }
+    }
+
+    async function renderRepoFiles(repo, path) {
+        const content = document.getElementById('repo-detail-content');
+        try {
+            const resp = await fetch(`https://api.github.com/repos/${repo.owner.login}/${repo.name}/contents${path}`);
+            if (!resp.ok) throw new Error(resp.statusText);
+            const items = await resp.json();
+
+            let html = `<div class="clone-box">
+                <code>git clone ${escapeHtml(repo.clone_url)}</code>
+                <button onclick="navigator.clipboard.writeText('${repo.clone_url}');this.textContent='Copied!';setTimeout(()=>this.textContent='Copy',1500)">Copy</button>
+            </div>`;
+
+            if (path) {
+                html += `<div class="rd-dir-item" data-path="${path.substring(0, path.lastIndexOf('/')) || ''}">
+                    <i class="fas fa-folder"></i> ..
+                </div>`;
+            }
+
+            items.forEach(item => {
+                if (item.type === 'dir') {
+                    html += `<div class="rd-dir-item" data-path="${path}/${item.name}"><i class="fas fa-folder"></i> ${escapeHtml(item.name)}</div>`;
+                } else {
+                    html += `<div class="rd-file-item" data-url="${item.download_url || ''}"><i class="fas fa-file"></i> ${escapeHtml(item.name)}</div>`;
+                }
+            });
+
+            content.innerHTML = html;
+
+            content.querySelectorAll('.rd-dir-item').forEach(el => {
+                el.addEventListener('click', () => renderRepoFiles(repo, el.dataset.path));
+            });
+
+            content.querySelectorAll('.rd-file-item').forEach(el => {
+                el.addEventListener('click', async () => {
+                    const url = el.dataset.url;
+                    if (!url) return;
+                    const name = el.textContent.trim();
+                    content.innerHTML = '<div class="github-loading"><i class="fas fa-circle-notch fa-spin"></i> Loading file...</div>';
+                    try {
+                        const r = await fetch(url);
+                        const text = await r.text();
+                        if (text.length > 100 * 1024) {
+                            content.innerHTML = `<p style="color:var(--yellow)">File too large. <a href="${url}" target="_blank" style="color:var(--accent)">Download</a></p>`;
+                        } else {
+                            content.innerHTML = `<h3>${escapeHtml(name)}</h3><pre><code>${escapeHtml(text)}</code></pre>`;
+                        }
+                    } catch (e) {
+                        content.innerHTML = `<p style="color:var(--red)">Error: ${escapeHtml(e.message)}</p>`;
+                    }
+                });
+            });
+
+        } catch (err) {
+            content.innerHTML = `<p style="color:var(--red)">Failed to load files: ${escapeHtml(err.message)}</p>`;
+        }
+    }
+
+    async function renderRepoReadme(repo) {
+        const content = document.getElementById('repo-detail-content');
+        try {
+            const resp = await fetch(`https://api.github.com/repos/${repo.owner.login}/${repo.name}/readme`);
+            if (!resp.ok) {
+                content.innerHTML = '<p>No README found.</p>';
+                return;
+            }
+            const data = await resp.json();
+            const decoded = decodeURIComponent(escape(atob(data.content)));
+            content.innerHTML = marked.parse(decoded);
+        } catch (err) {
+            content.innerHTML = `<p style="color:var(--red)">Error: ${escapeHtml(err.message)}</p>`;
+        }
+    }
+
+    async function renderRepoReleases(repo) {
+        const content = document.getElementById('repo-detail-content');
+        try {
+            const resp = await fetch(`https://api.github.com/repos/${repo.owner.login}/${repo.name}/releases`);
+            if (!resp.ok) throw new Error(resp.statusText);
+            const releases = await resp.json();
+
+            if (!releases.length) {
+                content.innerHTML = '<p>No releases found.</p>';
+                return;
+            }
+
+            content.innerHTML = releases.map(rel => `
+                <div class="release-card">
+                    <h4>${escapeHtml(rel.tag_name)} — ${new Date(rel.published_at).toLocaleDateString()}</h4>
+                    <p>${escapeHtml(rel.name || '')}</p>
+                    ${rel.assets.map(a => `<a href="${a.browser_download_url}" target="_blank">
+                        <i class="fas fa-download"></i> ${escapeHtml(a.name)} (${(a.size / 1024 / 1024).toFixed(2)} MB)
+                    </a><br>`).join('')}
+                </div>
+            `).join('');
+        } catch (err) {
+            content.innerHTML = `<p style="color:var(--red)">Error: ${escapeHtml(err.message)}</p>`;
+        }
+    }
+
+    // =============================
+    // FILE MANAGER
+    // =============================
+    function renderFileManager(path) {
+        const main = document.getElementById('files-main');
+        const titleEl = document.querySelector('#window-files .window-title');
+        titleEl.innerHTML = `<i class="fas fa-folder-open"></i> File Manager — ${path}`;
+
+        // Update sidebar active
+        document.querySelectorAll('.files-sidebar-item').forEach(item => {
+            item.classList.toggle('active', item.dataset.path === path);
+        });
+
+        const node = getNode(path);
+        if (!node || node.type !== 'dir') {
+            main.innerHTML = '<div style="padding:20px;color:var(--text-muted)">Directory not found.</div>';
+            return;
+        }
+
+        let html = '';
+        // Add ".." if not root
+        if (path !== '/') {
+            const parent = path.substring(0, path.lastIndexOf('/')) || '/';
+            html += `<div class="file-item is-dir" data-path="${parent}">
+                <i class="fas fa-folder"></i><span>..</span>
+            </div>`;
+        }
+
+        // Sort: dirs first
+        const entries = Object.entries(node.children).sort((a, b) => {
+            const aDir = a[1].type === 'dir' ? 0 : 1;
+            const bDir = b[1].type === 'dir' ? 0 : 1;
+            return aDir - bDir || a[0].localeCompare(b[0]);
+        });
+
+        entries.forEach(([name, child]) => {
+            const isDir = child.type === 'dir';
+            const fullPath = path === '/' ? '/' + name : path + '/' + name;
+            const icon = isDir ? 'fa-folder' : (name.endsWith('.txt') || name.endsWith('.md') ? 'fa-file-alt' : 'fa-file');
+            html += `<div class="file-item ${isDir ? 'is-dir' : 'is-file'}" data-path="${fullPath}" data-type="${child.type}">
+                <i class="fas ${icon}"></i><span>${name}</span>
+            </div>`;
+        });
+
+        main.innerHTML = html;
+
+        // Click handlers
+        main.querySelectorAll('.file-item').forEach(el => {
+            el.addEventListener('dblclick', () => {
+                if (el.dataset.type === 'dir' || el.classList.contains('is-dir')) {
+                    renderFileManager(el.dataset.path);
+                } else {
+                    // Open file in terminal
+                    openWindow('terminal');
+                    const filePath = el.dataset.path;
+                    execCommand('cat ' + filePath);
+                }
+            });
+        });
+    }
+
+    // Sidebar navigation
+    document.querySelectorAll('.files-sidebar-item').forEach(item => {
+        item.addEventListener('click', () => {
+            renderFileManager(item.dataset.path);
         });
     });
 
-    document.querySelectorAll('.window-button.maximize').forEach(button => {
-        button.addEventListener('click', (e) => {
-            maximizeWindow(e.target.closest('.window'));
-        });
-    });
+    // =============================
+    // INITIAL STATE
+    // =============================
+    updatePrompt();
 
-    // Desktop icon click handlers
-    terminalIcon.addEventListener('click', () => {
-        openWindow(terminalWindow, 'Terminal');
-    });
+    // Open terminal on load
+    openWindow('terminal');
 
-    githubIcon.addEventListener('click', () => {
-        fetchGitHubRepos('bummy1337'); // Fetch repos on GitHub icon click
-        openWindow(portfolioWindow, 'GitHub Repositories');
-    });
-
-    aboutIcon.addEventListener('click', () => {
-        displayAboutMe();
-        openWindow(portfolioWindow, 'About Me');
-    });
-
-    // New desktop icon click handlers
-    catshadeIcon.addEventListener('click', () => {
-        window.open('https://catshade.ru', '_blank');
-    });
-
-    minecraftIcon.addEventListener('click', () => {
-        window.open('https://legacymirror.space', '_blank');
-    });
-
-    // Initial setup
-    // Initial messages are now in index.html, just write the prompt
-    writePrompt();
-
-    // Automatically fetch GitHub repos and display them in the portfolio window
-    fetchGitHubRepos('bummy1337');
-    openWindow(portfolioWindow, 'GitHub Repositories');
 });
